@@ -83,6 +83,13 @@ h1 {
 .icon-button:hover,
 .secondary-button:hover { background: rgba(255,255,255,.075); color: var(--text); }
 
+.game-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
 .game-card {
   overflow: hidden;
   border: 1px solid var(--line);
