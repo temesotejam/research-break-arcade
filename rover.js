@@ -332,57 +332,106 @@ async function boot(){
     setLight(lightIndex);updateMapUI();
   }
 
-  // Rover model
+  // Minecraft-style humanoid autonomous bot
   const rover=new THREE.Group();scene.add(rover);
-  const bodyMat=new THREE.MeshStandardMaterial({color:0xc3b19b,roughness:.55,metalness:.08}),darkMat=new THREE.MeshStandardMaterial({color:0x292b2a,roughness:.78});
-  const panelMat=new THREE.MeshStandardMaterial({color:0x263b49,roughness:.30,metalness:.32}),brassMat=new THREE.MeshStandardMaterial({color:0x8e774b,roughness:.55,metalness:.35});
-  const body=new THREE.Mesh(new THREE.BoxGeometry(1.25,.28,.82),bodyMat);body.position.y=.38;body.castShadow=true;rover.add(body);
-  const deck=new THREE.Mesh(new THREE.BoxGeometry(1.06,.055,.72),panelMat);deck.position.y=.56;deck.castShadow=true;rover.add(deck);
-  const mast=new THREE.Group();mast.position.set(.18,.58,0);rover.add(mast);
-  const mastStem=new THREE.Mesh(new THREE.CylinderGeometry(.045,.055,.55,10),brassMat);mastStem.position.y=.27;mast.add(mastStem);
-  const mastTilt=new THREE.Group();mastTilt.position.y=.58;mast.add(mastTilt);
-  const mastHead=new THREE.Mesh(new THREE.BoxGeometry(.23,.14,.18),darkMat);mastHead.castShadow=true;mastTilt.add(mastHead);
-  const lens=new THREE.Mesh(new THREE.CylinderGeometry(.045,.045,.045,16),new THREE.MeshStandardMaterial({color:0x0c1115,metalness:.5,roughness:.15}));
-  lens.rotation.z=Math.PI/2;lens.position.set(.13,0,0);mastTilt.add(lens);
 
-  const wheelGeo=new THREE.CylinderGeometry(.18,.18,.12,24);wheelGeo.rotateX(Math.PI/2);const wheels=[];
-  for(const x of [-.46,0,.46])for(const z of [-.49,.49]){const w=new THREE.Mesh(wheelGeo,darkMat);w.position.set(x,.18,z);w.castShadow=true;rover.add(w);wheels.push(w)}
+  const botSkin=blockMaterial(0xb8b8b2);
+  const botDark=blockMaterial(0x30363a);
+  const botAccent=blockMaterial(0x4f8051);
+  const botFace=blockMaterial(0x202629);
+  const botJoint=blockMaterial(0x6f7475);
+  const botGlow=new THREE.MeshStandardMaterial({color:0x63b86e,roughness:.45,emissive:0x193d1d,emissiveIntensity:.65});
 
-  const armBase=new THREE.Group();armBase.position.set(.50,.47,-.28);rover.add(armBase);
-  const baseDisk=new THREE.Mesh(new THREE.CylinderGeometry(.11,.12,.08,16),brassMat);baseDisk.position.y=.02;armBase.add(baseDisk);
-  const shoulder=new THREE.Group();shoulder.position.y=.08;armBase.add(shoulder);
-  function armSegment(length){const seg=new THREE.Mesh(new THREE.BoxGeometry(length,.075,.075),new THREE.MeshStandardMaterial({color:0xb7a383,roughness:.5,metalness:.1}));seg.position.x=length*.5;seg.castShadow=true;return seg}
-  shoulder.add(armSegment(.55));const elbow=new THREE.Group();elbow.position.x=.55;shoulder.add(elbow);elbow.add(armSegment(.47));
-  const wrist=new THREE.Group();wrist.position.x=.47;elbow.add(wrist);const tool=new THREE.Mesh(new THREE.CylinderGeometry(.045,.06,.18,12),darkMat);tool.rotation.z=Math.PI/2;tool.position.x=.09;wrist.add(tool);
+  const torso=new THREE.Mesh(new THREE.BoxGeometry(.30,.64,.52),botSkin);
+  torso.position.set(0,.96,0);torso.castShadow=true;rover.add(torso);
+  const chestPanel=new THREE.Mesh(new THREE.BoxGeometry(.025,.26,.28),botDark);
+  chestPanel.position.set(.165,1.00,0);rover.add(chestPanel);
 
-  // Upgrade visuals
-  const auxBattery=new THREE.Mesh(new THREE.BoxGeometry(.42,.20,.60),new THREE.MeshStandardMaterial({color:0x6f695d,roughness:.6}));auxBattery.position.set(-.36,.68,0);rover.add(auxBattery);
-  const lidarGroup=new THREE.Group();lidarGroup.position.set(-.18,.66,0);const lidarBase=new THREE.Mesh(new THREE.CylinderGeometry(.10,.10,.08,16),darkMat);lidarGroup.add(lidarBase);
-  const lidarHead=new THREE.Mesh(new THREE.CylinderGeometry(.065,.065,.06,18),new THREE.MeshStandardMaterial({color:0x87beb4,emissive:0x203b37,metalness:.25,roughness:.35}));lidarHead.position.y=.07;lidarGroup.add(lidarHead);rover.add(lidarGroup);
-  const solarWing=new THREE.Mesh(new THREE.BoxGeometry(.65,.025,.30),panelMat);solarWing.position.set(-.38,.63,-.50);rover.add(solarWing);
-  const suspensionGroup=new THREE.Group();for(const x of [-.46,0,.46])for(const z of [-.39,.39]){const s=new THREE.Mesh(new THREE.CylinderGeometry(.018,.018,.28,8),new THREE.MeshStandardMaterial({color:0xa37c46,metalness:.4,roughness:.5}));s.position.set(x,.31,z);s.rotation.x=z>0?.35:-.35;suspensionGroup.add(s)}rover.add(suspensionGroup);
-  const drillTip=new THREE.Mesh(new THREE.ConeGeometry(.065,.18,12),new THREE.MeshStandardMaterial({color:0x777b78,metalness:.6,roughness:.3}));drillTip.rotation.z=-Math.PI/2;drillTip.position.x=.20;wrist.add(drillTip);
+  // Head = actual pan/tilt camera platform.
+  const mast=new THREE.Group();mast.position.set(0,1.52,0);rover.add(mast);
+  const mastTilt=new THREE.Group();mast.add(mastTilt);
+  const head=new THREE.Mesh(new THREE.BoxGeometry(.40,.40,.40),botSkin);
+  head.castShadow=true;mastTilt.add(head);
+  const facePlate=new THREE.Mesh(new THREE.BoxGeometry(.025,.18,.28),botFace);
+  facePlate.position.set(.213,0,0);mastTilt.add(facePlate);
+  const eyeMat=new THREE.MeshStandardMaterial({color:0x9de2d2,emissive:0x234e46,emissiveIntensity:.9,roughness:.25});
+  const eyeL=new THREE.Mesh(new THREE.BoxGeometry(.025,.055,.07),eyeMat);
+  const eyeR=eyeL.clone();eyeL.position.set(.228,.035,-.085);eyeR.position.set(.228,.035,.085);mastTilt.add(eyeL,eyeR);
+  const lens=new THREE.Object3D();lens.position.set(.235,.02,0);mastTilt.add(lens);
+
+  // Legs.
+  const leftLegPivot=new THREE.Group(),rightLegPivot=new THREE.Group();
+  leftLegPivot.position.set(0,.66,.15);rightLegPivot.position.set(0,.66,-.15);rover.add(leftLegPivot,rightLegPivot);
+  const legGeo=new THREE.BoxGeometry(.24,.64,.22);
+  const leftLeg=new THREE.Mesh(legGeo,botDark),rightLeg=new THREE.Mesh(legGeo,botDark);
+  leftLeg.position.y=-.32;rightLeg.position.y=-.32;leftLeg.castShadow=rightLeg.castShadow=true;
+  leftLegPivot.add(leftLeg);rightLegPivot.add(rightLeg);
+
+  // Arms. The right arm doubles as mining/manipulation arm.
+  const leftArmPivot=new THREE.Group();leftArmPivot.position.set(0,1.24,.37);rover.add(leftArmPivot);
+  const leftArm=new THREE.Mesh(new THREE.BoxGeometry(.22,.64,.22),botSkin);leftArm.position.y=-.31;leftArm.castShadow=true;leftArmPivot.add(leftArm);
+
+  const armBase=new THREE.Group();armBase.position.set(0,1.24,-.37);rover.add(armBase);
+  const shoulder=new THREE.Group();armBase.add(shoulder);
+  const upperArm=new THREE.Mesh(new THREE.BoxGeometry(.22,.36,.22),botSkin);upperArm.position.y=-.18;upperArm.castShadow=true;shoulder.add(upperArm);
+  const elbow=new THREE.Group();elbow.position.y=-.36;shoulder.add(elbow);
+  const foreArm=new THREE.Mesh(new THREE.BoxGeometry(.22,.30,.22),botSkin);foreArm.position.y=-.15;foreArm.castShadow=true;elbow.add(foreArm);
+  const wrist=new THREE.Group();wrist.position.y=-.31;elbow.add(wrist);
+
+  // Upgrade visuals: visibly robotic, but not armor/weapon progression.
+  const speedBootL=new THREE.Mesh(new THREE.BoxGeometry(.28,.13,.26),botAccent);
+  const speedBootR=speedBootL.clone();speedBootL.position.set(.05,-.57,0);speedBootR.position.set(.05,-.57,0);
+  leftLegPivot.add(speedBootL);rightLegPivot.add(speedBootR);
+
+  const miningTool=new THREE.Group();
+  const toolHandle=new THREE.Mesh(new THREE.BoxGeometry(.08,.58,.08),blockMaterial(0x7d5638));toolHandle.position.y=-.27;
+  const toolHead=new THREE.Mesh(new THREE.BoxGeometry(.14,.12,.52),blockMaterial(0x5fb9c7));toolHead.position.y=-.55;
+  miningTool.add(toolHandle,toolHead);miningTool.position.set(.04,-.02,0);wrist.add(miningTool);
+
+  const opticVisor=new THREE.Mesh(new THREE.BoxGeometry(.035,.10,.34),new THREE.MeshStandardMaterial({color:0x5ba8c4,transparent:true,opacity:.72,emissive:0x12323d,emissiveIntensity:.5}));
+  opticVisor.position.set(.235,.03,0);mastTilt.add(opticVisor);
+
+  const detectionAntenna=new THREE.Group();
+  const antStem=new THREE.Mesh(new THREE.BoxGeometry(.05,.28,.05),botJoint);antStem.position.y=.14;
+  const antTip=new THREE.Mesh(new THREE.BoxGeometry(.10,.10,.10),botGlow);antTip.position.y=.31;detectionAntenna.add(antStem,antTip);
+  detectionAntenna.position.set(0,.22,0);mastTilt.add(detectionAntenna);
+
+  const analysisModule=new THREE.Mesh(new THREE.BoxGeometry(.12,.18,.12),botAccent);
+  analysisModule.position.set(-.21,.04,.15);mastTilt.add(analysisModule);
+
+  const efficiencyCore=new THREE.Mesh(new THREE.BoxGeometry(.035,.18,.18),botGlow);
+  efficiencyCore.position.set(.185,.98,0);rover.add(efficiencyCore);
 
   const UPGRADE_DEFS={
-    traction:{label:"IRON TREADS",cost:2},
-    battery:{label:"REDSTONE CELL",cost:3},
-    lidar:{label:"AMETHYST SCANNER",cost:2},
-    suspension:{label:"SLIME SUSPENSION",cost:3},
-    arm:{label:"DIAMOND TOOL",cost:3},
-    solar:{label:"DAYLIGHT ARRAY",cost:2}
+    speed:{label:"MOVEMENT MODULE",cost:2},
+    mining:{label:"MINING MODULE",cost:3},
+    vision:{label:"LONG-RANGE OPTICS",cost:2},
+    detection:{label:"DETECTION ARRAY",cost:2},
+    analysis:{label:"FAST ANALYZER",cost:2},
+    efficiency:{label:"POWER EFFICIENCY",cost:3}
   };
   const has=u=>life.upgrades.includes(u);
-  function maxBattery(){return has("battery")?150:100}
+  function maxBattery(){return 100}
   function applyUpgradeVisuals(){
-    auxBattery.visible=has("battery");lidarGroup.visible=has("lidar");solarWing.visible=has("solar");suspensionGroup.visible=has("suspension");drillTip.visible=has("arm");
-    const sc=has("traction")?1.20:1;wheels.forEach(w=>w.scale.set(sc,sc,sc));
+    speedBootL.visible=speedBootR.visible=has("speed");
+    miningTool.visible=has("mining");
+    opticVisor.visible=has("vision");
+    detectionAntenna.visible=has("detection");
+    analysisModule.visible=has("analysis");
+    efficiencyCore.visible=has("efficiency");
   }
+  function movementMultiplier(){return has("speed")?1.48:1}
+  function miningMultiplier(){return has("mining")?1.85:1}
+  function analysisMultiplier(){return has("analysis")?1.75:1}
+  function visionMultiplier(){return has("vision")?1.65:1}
+  function detectionBoost(){return has("detection")?.14:0}
+  function efficiencyMultiplier(){return has("efficiency")?.63:1}
 
   const roverState={
     x:0,z:0,heading:.35,speed:0,targetSpeed:0,battery:clamp(life.battery||100,0,maxBattery()),state:"THINK",timer:1.2,
     targetZone:null,goal:null,navPurpose:null,prevDist:Infinity,stuckTime:0,recoverSign:1,
     mastYaw:0,mastPitch:-.08,mastYawTarget:0,mastPitchTarget:-.08,movingScanPhase:0,
-    armProgress:0,armVisual:0,scanProgress:0,yawRate:0,wheelAngleL:0,wheelAngleR:0,upgradeChoice:null,
+    armProgress:0,armVisual:0,scanProgress:0,yawRate:0,walkPhase:0,upgradeChoice:null,
     mission:(life.currentMission&&life.currentMission.mapIndex===life.mapIndex)?structuredClone(life.currentMission):null
   };
   if(life.position&&life.position.mapIndex===life.mapIndex){roverState.x=life.position.x;roverState.z=life.position.z;roverState.heading=life.position.heading}
@@ -437,14 +486,15 @@ async function boot(){
   function upgradeNeeds(){
     const e=life.exp,c=activeConfig;
     return{
-      traction:clamp(c.rough*.46+e.stucks*.16,0,1),
-      battery:clamp(e.charges*.18+life.mapIndex*.06+(1-roverState.battery/maxBattery())*.26,0,1),
-      lidar:clamp(unseenZones().length/zones.length*.42+e.scans*.025+life.mapIndex*.06,0,1),
-      suspension:clamp(c.rough*.42+e.distance/150,0,1),
-      arm:clamp(life.samples*.055+e.contacts*.08,0,1),
-      solar:clamp(e.charges*.20+life.mapIndex*.05,0,1)
+      speed:clamp(.28+c.rough*.28+e.distance/180+e.stucks*.08,0,1),
+      mining:clamp(.30+life.parts*.08+e.contacts*.09,0,1),
+      vision:clamp(unseenZones().length/zones.length*.48+life.mapIndex*.05,0,1),
+      detection:clamp(.34+unseenZones().length/zones.length*.34+e.scans*.025,0,1),
+      analysis:clamp(.30+e.scans*.055+life.mapIndex*.04,0,1),
+      efficiency:clamp(.24+e.charges*.15+e.distance/220,0,1)
     };
   }
+
   function desiredUpgradeCandidate(){
     const needs=upgradeNeeds();let best=null;
     for(const [id,d] of Object.entries(UPGRADE_DEFS)){
