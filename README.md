@@ -74,18 +74,18 @@
 
 ## Autonomous Mode — Tiny Bot / Minecraft World
 
-Minecraft風のブロック世界で、1体の人型自律ロボットを観察する永続型シミュレーションです。通常のMinecraftらしい探索・採掘・ポータル進行に、ロボット自身の非戦闘アップグレード要素だけを追加しています。
+Minecraft風のブロック世界で、1体の人型自律ロボットを観察する永続型シミュレーションです。WebGL / Three.js は使わず、標準の HTML Canvas 2D だけで描画します。通常のMinecraftらしい探索・採掘・ポータル進行に、ロボット自身の非戦闘アップグレード要素だけを追加しています。
 
 - ロボット本体は頭・胴体・両腕・両脚を持つMinecraft風のブロック人型
 - 移動中は腕と脚を振って歩き、頭そのものがパン / チルトするカメラ
 - 最大目標は **SELF EVOLUTION** と **REACH NEXT DIMENSION** の2つだけ
 - 測量そのものはMISSIONにせず、移動・観察・採掘は2つの最大目標を進めるための下位行動
 - OVERWORLD PLAINS → NETHER WASTES → THE END → 以降もMinecraft風チャンクを継続生成
-- 約64 m角のボクセル地形。草 / 土 / 石 / 木 / 鉱石 / ネザー系ブロック / エンド系ブロック / ポータルを軽量3Dで表現
+- 約64 m角のブロック世界を HTML Canvas 2D だけで軽量描画
 - IRON / REDSTONE / QUARTZ / GOLD などを認識・採掘して材料として回収
 - カメラに映った物だけを新規認識し、未発見物の座標を意思決定には使用しない
-- 3Dバウンディングボックス投影、画面占有率、距離、複数点遮蔽判定から認識信頼度を算出
-- ROVER CAMでは検出枠、分類名、認識信頼度、距離を表示。十分に分からない物体は `?`
+- 頭部方向・視野角・距離・見かけサイズ・2D遮蔽判定から認識信頼度を算出
+- BOT CAMでは検出枠、分類名、認識信頼度、距離を表示。十分に分からない物体は `?`
 - 調査後は STONE / IRON ORE / REDSTONE ORE / FLINT & STEEL / NETHER PORTAL などMinecraft側の分類名へ更新
 - ポータルフレームと起動アイテムを探し、発見 → 回収 → 起動 → 通過まで自律実行
 
@@ -148,5 +148,5 @@ MISSION、性格、材料、アップグレード、ディメンション、現�
 - `orbit.js` — Orbit Sling ゲームロジック / Canvas描画
 - `rover.html` — Tiny Rover UI
 - `rover.css` — Tiny Rover デザイン
-- `rover.js` — Tiny Bot MISSION / 人型アニメーション / 非戦闘アップグレード / ポータル進行 / 視覚認識 / ボクセル世界
+- `rover.js` — Pure Canvas 2D / MISSION / 人型アニメーション / 非戦闘アップグレード / ポータル進行 / 視覚認識
 - `pond.html` — Tiny Rover への互換リダイレクト
