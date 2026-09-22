@@ -177,11 +177,12 @@ let life=loadLife();
 
 function mem(){
   const k=String(life.regionIndex);
-  if(!life.regions[k])life.regions[k]={seen:[],discovered:[],recognized:{},keyHeld:false,gateKnown:false,gateActive:false,visited:[],mapped:[]};
+  if(!life.regions[k])life.regions[k]={seen:[],discovered:[],recognized:{},keyHeld:false,gateKnown:false,gateActive:false,visited:[],mapped:[],worldVersion:2};
   const m=life.regions[k];
   if(!Array.isArray(m.seen))m.seen=[];
   if(!Array.isArray(m.discovered))m.discovered=[];
   if(!m.recognized)m.recognized={};
+  if(m.worldVersion!==2){m.visited=[];m.mapped=[];m.worldVersion=2;}
   if(!Array.isArray(m.visited))m.visited=[];
   if(!Array.isArray(m.mapped))m.mapped=[];
   return m;
@@ -206,7 +207,9 @@ const bot={
   mission:life.currentMission&&life.currentMission.regionIndex===life.regionIndex?structuredClone(life.currentMission):null
 };
 if(life.position&&life.position.regionIndex===life.regionIndex){
-  bot.x=life.position.x;bot.y=life.position.y;bot.heading=life.position.heading;
+  bot.x=clamp(life.position.x,-HALF+2,HALF-2);
+  bot.y=clamp(life.position.y,-HALF+2,HALF-2);
+  bot.heading=life.position.heading;
 }
 if(bot.mission&&!["evolve","advance"].includes(bot.mission.type))bot.mission=null;
 
