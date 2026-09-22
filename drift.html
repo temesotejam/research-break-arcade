@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#11161a">
+  <meta name="description" content="研究の合間に遊べる1ボタンドリフトゲーム One Button Drift。">
+  <title>Research Break Arcade — One Button Drift</title>
+  <link rel="stylesheet" href="drift.css">
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">RESEARCH BREAK ARCADE · GAME 04</p>
+        <h1>One Button Drift</h1>
+      </div>
+      <nav class="top-actions" aria-label="ゲーム切り替え">
+        <a class="nav-button" href="index.html">Tiny Lander</a>
+        <a class="nav-button" href="fishing.html">Night Fishing</a>
+        <a class="nav-button" href="tower.html">Stack Tower</a>
+        <button id="soundButton" class="nav-button" type="button" aria-pressed="false">SOUND OFF</button>
+        <button id="pauseButton" class="nav-button" type="button" aria-pressed="false">PAUSE</button>
+      </nav>
+    </header>
+
+    <section class="game-card">
+      <div class="hud" aria-live="polite">
+        <div class="hud-item"><span>TIME</span><strong id="timeValue">90.0</strong><small>s</small></div>
+        <div class="hud-item"><span>SCORE</span><strong id="scoreValue">0</strong></div>
+        <div class="hud-item"><span>LAP</span><strong id="lapValue">0</strong></div>
+        <div class="hud-item"><span>BEST</span><strong id="bestValue">0</strong></div>
+      </div>
+
+      <div class="stage-wrap">
+        <canvas id="gameCanvas" width="960" height="600" aria-label="1ボタンドリフトゲーム"></canvas>
+
+        <div id="checkpointCallout" class="checkpoint-callout" hidden aria-live="polite">CHECK!</div>
+
+        <div id="overlay" class="overlay">
+          <div class="overlay-panel">
+            <p id="overlayKicker" class="overlay-kicker">ONE BUTTON BREAK</p>
+            <h2 id="overlayTitle">押すと曲がる。離すとまっすぐ。</h2>
+            <p id="overlayText">車は自動で進みます。Space / DRIFTを押している間だけ左へ曲がります。押しすぎると内側、離しすぎると外側へ。</p>
+            <div id="resultStats" class="result-stats" hidden></div>
+            <div class="overlay-actions">
+              <button id="primaryButton" class="primary-button" type="button">START DRIFT</button>
+              <button id="secondaryButton" class="secondary-button" type="button" hidden>研究に戻る</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="status-panel">
+        <div>
+          <p class="status-label">NOW</p>
+          <strong id="statusText">スタートライン</strong>
+          <span id="hintText">路面中央をなぞるとFLOWが上がります。</span>
+        </div>
+        <div class="flow-area">
+          <div class="flow-head">
+            <span>FLOW</span>
+            <strong id="flowText">×1.00</strong>
+          </div>
+          <div class="flow-meter"><div id="flowFill" class="flow-fill"></div></div>
+          <small id="roadText">ON ROAD</small>
+        </div>
+      </div>
+
+      <button id="driftButton" class="drift-button" type="button">
+        <span>DRIFT</span>
+        <small>Hold Space / Hold</small>
+      </button>
+
+      <div class="rules">
+        <span><b>押す</b> → 左へ曲がる</span>
+        <span><b>離す</b> → まっすぐ進む</span>
+        <span><b>中央を維持</b> → FLOW倍率アップ</span>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span>コースアウトしても自動復帰します。</span>
+      <span>Best score is saved on this device.</span>
+    </footer>
+  </main>
+
+  <script src="drift.js"></script>
+</body>
+</html>
