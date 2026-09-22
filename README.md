@@ -72,6 +72,23 @@
 
 公開ページ: `orbit.html`
 
+## Quiet Mode — Pocket Pond
+
+目的・スコア・ゲームオーバーのない観察用ミニ池です。
+
+- 魚が自律的に泳ぐ
+- カエルが睡蓮の葉を移動する
+- トンボが水面上を飛ぶ
+- カメがときどき顔を出す
+- 夕暮れから夜にかけてホタルが現れる
+- FEED / RAIN / DUSK で景色に少しだけ介入できる
+- 水面タップで波紋を作り、近くの魚を寄せられる
+- VIEWで POND / FISH POV / FROG POV / DRAGONFLY POV を切り替え
+- FISH POV は魚に追従し、進行方向を画面上方向へ固定
+- 時間制限なし、スコアなし
+
+公開ページ: `pond.html`
+
 ## Run locally
 
 `index.html` をブラウザで開くだけでも動作します。ローカルHTTPサーバーを使う場合は任意の静的サーバーでこのディレクトリを配信してください。
@@ -103,3 +120,6 @@
 - `orbit.html` — Orbit Sling UI
 - `orbit.css` — Orbit Sling デザイン
 - `orbit.js` — Orbit Sling ゲームロジック / Canvas描画
+- `pond.html` — Pocket Pond UI
+- `pond.css` — Pocket Pond デザイン
+- `pond.js` — Pocket Pond 生態シミュレーション / POVカメラ
