@@ -812,7 +812,7 @@ function simulateLogicalTime(seconds, source="catch-up"){
     simulated+=dt;remaining-=dt;
   }
   saveLife();
-  if(seconds>1.0)log(source+" · advanced "+Math.round(seconds)+" s");
+  if(source!=="background"&&seconds>1.0)log(source+" · advanced "+Math.round(seconds)+" s");
 }
 
 function startBackgroundClock(){
