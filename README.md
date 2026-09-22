@@ -107,7 +107,7 @@
 - **FAST ANALYZER** — 調査速度 ×1.75
 - **POWER EFFICIENCY** — エネルギー消費 ×0.63
 
-MISSION、性格、部品、アップグレード、地域、現在座標は Local Storage に保存されます。PAUSE機能はなく、開始後は明示的に停止状態へ切り替えません。NEW LIFE でのみ完全初期化します。
+MISSION、性格、部品、アップグレード、地域、現在座標は Local Storage に保存されます。PAUSE機能はありません。非表示タブでブラウザが requestAnimationFrame やタイマーを抑制した場合も、復帰時に経過時間を論理シミュレーションして追いつくため、ゲーム内時間を捨てません。NEW LIFE でのみ完全初期化します。
 
 公開ページ: `rover.html`
 
