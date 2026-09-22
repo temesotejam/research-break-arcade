@@ -1,405 +1,564 @@
 (() => {
 "use strict";
 
-const canvas=document.getElementById("pondCanvas");
-const ctx=canvas.getContext("2d");
+const THREE_URL="https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js";
 
-const intro=document.getElementById("intro");
-const enterButton=document.getElementById("enterButton");
-const pauseButton=document.getElementById("pauseButton");
-const viewButton=document.getElementById("viewButton");
-const attractButton=document.getElementById("attractButton");
-const lightButton=document.getElementById("lightButton");
-const viewBadge=document.getElementById("viewBadge");
-const viewLabel=document.getElementById("viewLabel");
-const lightLabel=document.getElementById("lightLabel");
-const viewName=document.getElementById("viewName");
-const stateText=document.getElementById("stateText");
-const observationText=document.getElementById("observationText");
-const hintText=document.getElementById("hintText");
-const depthText=document.getElementById("depthText");
-const speedText=document.getElementById("speedText");
-const headingText=document.getElementById("headingText");
+async function boot(){
+  const canvas=document.getElementById("pondCanvas");
+  const intro=document.getElementById("intro");
+  const enterButton=document.getElementById("enterButton");
+  const pauseButton=document.getElementById("pauseButton");
+  const viewButton=document.getElementById("viewButton");
+  const attractButton=document.getElementById("attractButton");
+  const lightButton=document.getElementById("lightButton");
+  const viewBadge=document.getElementById("viewBadge");
+  const viewLabel=document.getElementById("viewLabel");
+  const lightLabel=document.getElementById("lightLabel");
+  const viewName=document.getElementById("viewName");
+  const stateText=document.getElementById("stateText");
+  const observationText=document.getElementById("observationText");
+  const hintText=document.getElementById("hintText");
+  const depthText=document.getElementById("depthText");
+  const speedText=document.getElementById("speedText");
+  const headingText=document.getElementById("headingText");
 
-const W=canvas.width,H=canvas.height;
-const pond={cx:W*.5,cy:H*.57,rx:W*.40,ry:H*.31};
-const views=["pond","follow","pov"];
-const lights=[
-  {name:"SOFT AFTERNOON",sky1:"#708c76",sky2:"#adc2a2",water1:"#6e9b91",water2:"#295b55",sun:.78},
-  {name:"GOLDEN HOUR",sky1:"#846e58",sky2:"#c7a777",water1:"#789287",water2:"#385853",sun:.64},
-  {name:"OVERCAST",sky1:"#63706a",sky2:"#909d94",water1:"#667f79",water2:"#364d4a",sun:.34}
-];
-
-let running=false,paused=false,lastTime=performance.now(),viewIndex=0,viewMode="pond",lightIndex=0;
-let attract=null,attractTimer=0,ripple=null,rippleLife=0,observationTimer=0;
-
-const fish={
-  x:pond.cx-110,y:pond.cy+15,
-  vx:26,vy:-5,
-  heading:0,desiredHeading:0,
-  speed:27,targetSpeed:27,
-  depth:.48,targetDepth:.48,
-  turnRate:0,tailPhase:0,
-  state:"cruise",stateTimer:5.5,
-  pathBias:.35
-};
-
-const cam={x:W/2,y:H/2,scale:1,angle:0};
-
-const rocks=[
-  {x:pond.cx-235,y:pond.cy+78,r:34,t:0.1},
-  {x:pond.cx+214,y:pond.cy+86,r:26,t:0.2},
-  {x:pond.cx+165,y:pond.cy-94,r:22,t:0.3},
-  {x:pond.cx-128,y:pond.cy-108,r:18,t:0.4},
-  {x:pond.cx+15,y:pond.cy+118,r:16,t:0.5}
-];
-
-const floorPatches=[];
-for(let i=0;i<26;i++){
-  const a=(i*2.399963)+.4;
-  const rr=Math.sqrt((i+.5)/26)*.82;
-  floorPatches.push({
-    x:pond.cx+Math.cos(a)*pond.rx*rr,
-    y:pond.cy+Math.sin(a)*pond.ry*rr,
-    rx:18+(i%5)*5,ry:7+(i%4)*3,a:a*.27
-  });
-}
-
-function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
-function wrap(a){while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a}
-function inside(x,y,m=1){const nx=(x-pond.cx)/(pond.rx*m),ny=(y-pond.cy)/(pond.ry*m);return nx*nx+ny*ny<=1}
-function normEdge(x,y){const nx=(x-pond.cx)/pond.rx,ny=(y-pond.cy)/pond.ry;return Math.sqrt(nx*nx+ny*ny)}
-function enter(){running=true;intro.hidden=true;observationText.textContent="1匹だけ、静かに泳いでいます。";}
-function togglePause(){if(!running)return;paused=!paused;pauseButton.textContent=paused?"RESUME":"PAUSE";pauseButton.setAttribute("aria-pressed",paused?"true":"false")}
-function cycleView(){if(!running)return;viewIndex=(viewIndex+1)%views.length;viewMode=views[viewIndex];updateViewLabels()}
-function updateViewLabels(){
- const names={pond:"POND VIEW",follow:"FOLLOW",pov:"KOI POV"};
- const short={pond:"POND",follow:"FOLLOW",pov:"KOI POV"};
- viewBadge.textContent=names[viewMode];viewName.textContent=short[viewMode];
-}
-function cycleLight(){lightIndex=(lightIndex+1)%lights.length;lightLabel.textContent=lights[lightIndex].name}
-function attractKoi(){
- if(!running||paused)return;
- const a=Math.atan2(fish.y-pond.cy,fish.x-pond.cx)+Math.PI+(Math.random()-.5)*.9;
- const r=.25+.18*Math.random();
- attract={x:pond.cx+Math.cos(a)*pond.rx*r,y:pond.cy+Math.sin(a)*pond.ry*r};
- attractTimer=7.5;
- ripple={x:attract.x,y:attract.y,r:4};rippleLife=1;
- fish.state="investigate";fish.stateTimer=5.5;
- observationText.textContent="水面の小さな振動に気づいたようです。";
-}
-function setBehavior(){
- const r=Math.random();
- if(r<.18){fish.state="coast";fish.targetSpeed=12+Math.random()*5;fish.stateTimer=3.5+Math.random()*4;observationText.textContent="ほとんど止まり、ゆっくり姿勢だけを変えています。";}
- else if(r<.34){fish.state="surface";fish.targetDepth=.16+.08*Math.random();fish.targetSpeed=18+Math.random()*7;fish.stateTimer=5+Math.random()*4;observationText.textContent="少し水面へ上がってきました。";}
- else if(r<.48){fish.state="deep";fish.targetDepth=.72+.09*Math.random();fish.targetSpeed=21+Math.random()*8;fish.stateTimer=6+Math.random()*5;observationText.textContent="深い場所へゆっくり降りています。";}
- else {fish.state="cruise";fish.targetDepth=.36+.28*Math.random();fish.targetSpeed=22+Math.random()*11;fish.stateTimer=6+Math.random()*7;observationText.textContent="一定の速さで池を回っています。";}
- fish.pathBias=(Math.random()-.5)*.9;
-}
-function updateFish(dt){
- fish.stateTimer-=dt;attractTimer=Math.max(0,attractTimer-dt);
- if(fish.stateTimer<=0)setBehavior();
-
- let desired=fish.desiredHeading;
- const edge=normEdge(fish.x,fish.y);
- if(attractTimer>0&&attract){
-   desired=Math.atan2(attract.y-fish.y,attract.x-fish.x);
-   fish.targetSpeed=30;
-   fish.targetDepth=.30;
- }else{
-   const center=Math.atan2(pond.cy-fish.y,pond.cx-fish.x);
-   const tangent=center+Math.PI/2*(fish.pathBias>=0?1:-1);
-   const inward=clamp((edge-.58)/.34,0,1);
-   desired=wrap(tangent*(1-inward)+center*inward);
-   desired+=Math.sin(performance.now()*.00037+fish.pathBias*3)*.28;
- }
-
- if(edge>.84){
-   const center=Math.atan2(pond.cy-fish.y,pond.cx-fish.x);
-   desired=wrap(desired+(wrap(center-desired))*clamp((edge-.84)/.13,0,1));
- }
-
- const err=wrap(desired-fish.heading);
- const maxTurn=.72;
- fish.turnRate+=((clamp(err*1.4,-maxTurn,maxTurn))-fish.turnRate)*Math.min(1,dt*2.1);
- fish.heading=wrap(fish.heading+fish.turnRate*dt);
-
- fish.speed+=(fish.targetSpeed-fish.speed)*Math.min(1,dt*.7);
- fish.depth+=(fish.targetDepth-fish.depth)*Math.min(1,dt*.55);
-
- const glide=.96+.04*Math.cos(fish.tailPhase);
- fish.vx=Math.cos(fish.heading)*fish.speed*glide;
- fish.vy=Math.sin(fish.heading)*fish.speed*glide;
- fish.x+=fish.vx*dt;fish.y+=fish.vy*dt;
-
- if(!inside(fish.x,fish.y,.96)){
-   const c=Math.atan2(pond.cy-fish.y,pond.cx-fish.x);
-   fish.heading=c;
-   fish.x+=Math.cos(c)*4;fish.y+=Math.sin(c)*4;
- }
-
- const tailFreq=.7+fish.speed/22;
- fish.tailPhase+=dt*tailFreq*Math.PI*2;
-
- if(attractTimer>0&&attract&&Math.hypot(fish.x-attract.x,fish.y-attract.y)<30){
-   attractTimer=0;attract=null;fish.state="coast";fish.targetSpeed=10;fish.stateTimer=2.8;
-   observationText.textContent="振動のあった場所で、しばらく止まりました。";
- }
-}
-function updateCamera(dt){
- let tx=W/2,ty=H/2,ts=1,ta=0;
- if(viewMode==="follow"){tx=fish.x;ty=fish.y;ts=1.85;ta=0}
- if(viewMode==="pov"){tx=fish.x;ty=fish.y;ts=1;ta=0}
- cam.x+=(tx-cam.x)*Math.min(1,dt*2.8);
- cam.y+=(ty-cam.y)*Math.min(1,dt*2.8);
- cam.scale+=(ts-cam.scale)*Math.min(1,dt*2.6);
- cam.angle+=(ta-cam.angle)*Math.min(1,dt*2);
-}
-function update(dt){
- if(!running||paused)return;
- updateFish(dt);updateCamera(dt);
- if(rippleLife>0){rippleLife-=dt*.45;if(ripple)ripple.r+=dt*34}
- observationTimer-=dt;
- if(observationTimer<=0){
-   observationTimer=5.5;
-   if(fish.state==="cruise"&&fish.speed>27)observationText.textContent="尾びれの振れが少し速くなりました。";
-   else if(fish.depth>.68)observationText.textContent="底に近い、暗い場所を選んでいます。";
-   else if(fish.depth<.25)observationText.textContent="水面近くの明るい層を泳いでいます。";
- }
- stateText.textContent=fish.state==="coast"?"ほとんど止まっています。":fish.state==="surface"?"水面へ上がっています。":fish.state==="deep"?"深い場所へ降りています。":fish.state==="investigate"?"振動の場所へ向かっています。":"ゆっくり泳いでいます。";
- depthText.textContent="DEPTH "+Math.round(18+fish.depth*72)+" cm";
- speedText.textContent="SPEED "+(fish.speed/100).toFixed(2)+" m/s";
- headingText.textContent="Heading "+Math.round((fish.heading*180/Math.PI+360)%360)+"°";
-}
-
-function applyTopCamera(){
- ctx.translate(W/2,H/2);
- ctx.scale(cam.scale,cam.scale);
- ctx.translate(-cam.x,-cam.y);
-}
-function draw(){
- if(viewMode==="pov")drawPOV();
- else drawTop();
-}
-function drawTop(){
- const L=lights[lightIndex];
- const bg=ctx.createLinearGradient(0,0,0,H);
- bg.addColorStop(0,L.sky1);bg.addColorStop(1,L.sky2);
- ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
-
- ctx.save();applyTopCamera();
- drawBank(L);drawWater(L);drawFloor(L);drawRocks(L);drawCaustics(L);drawKoiShadow();drawKoi();drawRipple();drawEdgePlants(L);
- ctx.restore();
-
- drawVignette();
-}
-function drawBank(L){
- ctx.fillStyle=lightIndex===2?"#46534b":"#53684b";
- ctx.beginPath();ctx.ellipse(pond.cx,pond.cy,pond.rx+62,pond.ry+55,0,0,Math.PI*2);ctx.fill();
- ctx.fillStyle=lightIndex===1?"#5d593d":"#3f5542";
- ctx.beginPath();ctx.ellipse(pond.cx,pond.cy,pond.rx+25,pond.ry+22,0,0,Math.PI*2);ctx.fill();
-}
-function drawWater(L){
- const g=ctx.createRadialGradient(pond.cx-105,pond.cy-78,18,pond.cx,pond.cy,pond.rx);
- g.addColorStop(0,L.water1);g.addColorStop(1,L.water2);
- ctx.fillStyle=g;ctx.beginPath();ctx.ellipse(pond.cx,pond.cy,pond.rx,pond.ry,0,0,Math.PI*2);ctx.fill();
- ctx.globalAlpha=.12+L.sun*.08;ctx.fillStyle="#d9eee5";ctx.beginPath();ctx.ellipse(pond.cx-90,pond.cy-70,pond.rx*.42,pond.ry*.22,-.15,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
-}
-function drawFloor(L){
- ctx.save();ctx.beginPath();ctx.ellipse(pond.cx,pond.cy,pond.rx,pond.ry,0,0,Math.PI*2);ctx.clip();
- for(const p of floorPatches){ctx.globalAlpha=.10;ctx.fillStyle=(p.a%1>.5)?"#d6c6a3":"#708071";ctx.beginPath();ctx.ellipse(p.x,p.y,p.rx,p.ry,p.a,0,Math.PI*2);ctx.fill()}
- ctx.globalAlpha=1;ctx.restore();
-}
-function drawRocks(L){
- for(const r of rocks){
-  ctx.globalAlpha=.28;ctx.fillStyle="#1e2824";ctx.beginPath();ctx.ellipse(r.x+5,r.y+8,r.r*1.05,r.r*.45,r.t,0,Math.PI*2);ctx.fill();
-  const g=ctx.createRadialGradient(r.x-r.r*.3,r.y-r.r*.3,2,r.x,r.y,r.r);g.addColorStop(0,"#8a9486");g.addColorStop(1,"#3c4941");
-  ctx.globalAlpha=.62;ctx.fillStyle=g;ctx.beginPath();ctx.ellipse(r.x,r.y,r.r,r.r*.62,r.t,0,Math.PI*2);ctx.fill();
- }
- ctx.globalAlpha=1;
-}
-function drawCaustics(L){
- const t=performance.now()*.00035;
- ctx.save();ctx.beginPath();ctx.ellipse(pond.cx,pond.cy,pond.rx,pond.ry,0,0,Math.PI*2);ctx.clip();
- ctx.globalAlpha=.035+.045*L.sun;ctx.strokeStyle="#f3fff8";ctx.lineWidth=2;
- for(let j=0;j<9;j++){
-  ctx.beginPath();
-  for(let i=0;i<=36;i++){
-   const x=pond.cx-pond.rx+i*(pond.rx*2/36);
-   const y=pond.cy-pond.ry+j*(pond.ry*2/8)+Math.sin(i*.62+j+t*4)*7+Math.sin(i*.21-t*3)*4;
-   if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+  let THREE;
+  try{
+    THREE=await import(THREE_URL);
+  }catch(err){
+    const c=canvas.getContext("2d");
+    c.fillStyle="#10231c";c.fillRect(0,0,canvas.width,canvas.height);
+    c.fillStyle="#e9f1ea";c.font="700 22px system-ui";c.textAlign="center";
+    c.fillText("3D renderer could not be loaded.",canvas.width/2,canvas.height/2-8);
+    c.fillStyle="#9cad9f";c.font="14px system-ui";
+    c.fillText("Network access is required once to load Three.js.",canvas.width/2,canvas.height/2+22);
+    observationText.textContent="3Dライブラリを読み込めませんでした。";
+    return;
   }
-  ctx.stroke();
- }
- ctx.restore();ctx.globalAlpha=1;
-}
-function drawKoiShadow(){
- const depthScale=.35+.65*fish.depth;
- ctx.save();ctx.translate(fish.x+8,fish.y+12+fish.depth*14);ctx.rotate(fish.heading);
- ctx.globalAlpha=.10+.12*depthScale;ctx.fillStyle="#07120e";
- ctx.beginPath();ctx.ellipse(0,0,31,9,0,0,Math.PI*2);ctx.fill();ctx.restore();ctx.globalAlpha=1;
-}
-function drawKoi(){
- if(viewMode==="follow"||viewMode==="pond"){
-  const wag=Math.sin(fish.tailPhase);
-  const yaw=fish.turnRate*.55;
-  ctx.save();ctx.translate(fish.x,fish.y);ctx.rotate(fish.heading);
 
-  const depthFade=1-fish.depth*.28;
-  ctx.globalAlpha=.82*depthFade;
+  const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:"high-performance"});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.75));
+  renderer.setSize(canvas.clientWidth||960,(canvas.clientWidth||960)*600/960,false);
+  renderer.outputColorSpace=THREE.SRGBColorSpace;
+  renderer.toneMapping=THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure=1.03;
+  renderer.shadowMap.enabled=true;
+  renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 
-  ctx.save();ctx.translate(-26,0);ctx.rotate(wag*.38+yaw*.25);
-  ctx.fillStyle="#e5ddd0";
-  ctx.beginPath();ctx.moveTo(-3,0);ctx.quadraticCurveTo(-22,-13,-31,-17);ctx.quadraticCurveTo(-24,0,-31,17);ctx.quadraticCurveTo(-21,13,-3,0);ctx.fill();
-  ctx.restore();
+  const scene=new THREE.Scene();
+  scene.background=new THREE.Color(0x82978a);
+  scene.fog=new THREE.FogExp2(0x426b66,0.045);
 
-  const body=ctx.createLinearGradient(-28,-12,28,12);
-  body.addColorStop(0,"#ece7de");body.addColorStop(.54,"#d8d0c5");body.addColorStop(1,"#b9b2a9");
-  ctx.fillStyle=body;
-  ctx.beginPath();ctx.moveTo(31,0);ctx.bezierCurveTo(18,-15,-8,-17,-29,-8);ctx.bezierCurveTo(-35,-4,-35,4,-29,8);ctx.bezierCurveTo(-8,17,18,15,31,0);ctx.fill();
+  const camera=new THREE.PerspectiveCamera(48,16/10,.05,45);
+  const cameraTarget=new THREE.Vector3();
+  const cameraDesired=new THREE.Vector3();
 
-  ctx.fillStyle="#b44f3e";ctx.globalAlpha=.72*depthFade;
-  ctx.beginPath();ctx.ellipse(8,-5,11,5,-.25,0,Math.PI*2);ctx.fill();
-  ctx.beginPath();ctx.ellipse(-10,5,8,4,.4,0,Math.PI*2);ctx.fill();
+  const hemi=new THREE.HemisphereLight(0xdce8dd,0x24332b,1.65);
+  scene.add(hemi);
+  const sun=new THREE.DirectionalLight(0xfff1cf,2.2);
+  sun.position.set(-5,10,4);
+  sun.castShadow=true;
+  sun.shadow.mapSize.set(1024,1024);
+  sun.shadow.camera.left=-8;sun.shadow.camera.right=8;sun.shadow.camera.top=8;sun.shadow.camera.bottom=-8;
+  scene.add(sun);
 
-  ctx.globalAlpha=.34*depthFade;ctx.fillStyle="#ddd8cf";
-  ctx.beginPath();ctx.moveTo(-3,-10);ctx.quadraticCurveTo(3,-23,11,-19);ctx.quadraticCurveTo(9,-11,2,-5);ctx.closePath();ctx.fill();
-  ctx.beginPath();ctx.moveTo(-5,9);ctx.quadraticCurveTo(1,22,8,18);ctx.quadraticCurveTo(7,10,0,5);ctx.closePath();ctx.fill();
+  const lightPresets=[
+    {name:"SOFT AFTERNOON",bg:0x82978a,fog:0x426b66,hemi:1.65,sun:2.2,sunColor:0xfff1cf,water:[.18,.30,.34]},
+    {name:"GOLDEN HOUR",bg:0x8e806c,fog:0x53665e,hemi:1.25,sun:2.65,sunColor:0xffc77b,water:[.22,.27,.27]},
+    {name:"OVERCAST",bg:0x68756f,fog:0x4a5d59,hemi:1.25,sun:.72,sunColor:0xdde5e1,water:[.20,.27,.29]}
+  ];
 
-  ctx.globalAlpha=.92*depthFade;ctx.fillStyle="#141918";
-  ctx.beginPath();ctx.arc(21,-4,1.8,0,Math.PI*2);ctx.fill();
-  ctx.strokeStyle="rgba(240,238,225,.8)";ctx.lineWidth=.8;
-  ctx.beginPath();ctx.moveTo(28,-3);ctx.quadraticCurveTo(35,-6,39,-9);ctx.stroke();
-  ctx.beginPath();ctx.moveTo(28,3);ctx.quadraticCurveTo(35,6,39,9);ctx.stroke();
+  const pond={rx:5.1,rz:3.55,bottom:-2.55};
 
-  ctx.restore();ctx.globalAlpha=1;
- }
-}
-function drawRipple(){
- if(!ripple||rippleLife<=0)return;
- ctx.globalAlpha=rippleLife*.42;ctx.strokeStyle="#e5f4ee";ctx.lineWidth=1.4;
- ctx.beginPath();ctx.ellipse(ripple.x,ripple.y,ripple.r*1.6,ripple.r*.55,0,0,Math.PI*2);ctx.stroke();
- ctx.globalAlpha=1;
-}
-function drawEdgePlants(L){
- ctx.strokeStyle=lightIndex===1?"#665d3d":"#405f42";ctx.lineWidth=3;
- for(let i=0;i<30;i++){
-  const a=i/30*Math.PI*2;
-  const x=pond.cx+Math.cos(a)*(pond.rx+16),y=pond.cy+Math.sin(a)*(pond.ry+15);
-  const h=35+(i%7)*5;
-  ctx.beginPath();ctx.moveTo(x,y);ctx.quadraticCurveTo(x+Math.cos(a)*5,y-h*.55,x+Math.cos(a)*10,y-h);ctx.stroke();
- }
-}
-function drawVignette(){
- const g=ctx.createRadialGradient(W/2,H/2,H*.28,W/2,H/2,H*.76);
- g.addColorStop(.55,"rgba(0,0,0,0)");g.addColorStop(1,"rgba(0,0,0,.25)");
- ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  // Basin floor
+  const floorGeo=new THREE.CircleGeometry(5.05,96);
+  floorGeo.rotateX(-Math.PI/2);
+  const floorMat=new THREE.MeshStandardMaterial({color:0x49584a,roughness:.96,metalness:0});
+  const floor=new THREE.Mesh(floorGeo,floorMat);
+  floor.scale.z=pond.rz/pond.rx;
+  floor.position.y=pond.bottom;
+  floor.receiveShadow=true;
+  scene.add(floor);
+
+  // Bank ring
+  const bankGeo=new THREE.RingGeometry(5.05,6.25,128);
+  bankGeo.rotateX(-Math.PI/2);
+  const bankMat=new THREE.MeshStandardMaterial({color:0x485d40,roughness:1});
+  const bank=new THREE.Mesh(bankGeo,bankMat);
+  bank.scale.z=pond.rz/pond.rx;
+  bank.position.y=.02;
+  bank.receiveShadow=true;
+  scene.add(bank);
+
+  // Inner sloped wall
+  const wallGeo=new THREE.CylinderGeometry(5.08,4.82,2.55,96,1,true);
+  wallGeo.scale(1,1,pond.rz/pond.rx);
+  const wallMat=new THREE.MeshStandardMaterial({color:0x425149,roughness:.94,side:THREE.DoubleSide});
+  const wall=new THREE.Mesh(wallGeo,wallMat);
+  wall.position.y=-1.28;
+  wall.receiveShadow=true;
+  scene.add(wall);
+
+  // Static stones
+  const rocks=[
+    [-2.7,-2.30,1.05,.52,.76],[2.55,-2.31,1.42,.45,.72],[1.65,-2.32,-1.38,.38,.62],
+    [-1.4,-2.33,-1.5,.31,.58],[.25,-2.34,1.55,.29,.50],[-.4,-2.35,.25,.20,.35]
+  ];
+  const rockMat=new THREE.MeshStandardMaterial({color:0x667067,roughness:1});
+  for(let i=0;i<rocks.length;i++){
+    const [x,y,z,sx,sz]=rocks[i];
+    const g=new THREE.IcosahedronGeometry(1,2);
+    const m=new THREE.Mesh(g,rockMat);
+    m.position.set(x,y,z);
+    m.scale.set(sx,sx*.55,sz);
+    m.rotation.set(.15*(i%3),.7*i,.08*(i%2));
+    m.castShadow=true;m.receiveShadow=true;
+    scene.add(m);
+  }
+
+  // Static reeds - environment, not autonomous actors
+  const reedMat=new THREE.MeshStandardMaterial({color:0x446640,roughness:.9});
+  const reedGeo=new THREE.CylinderGeometry(.022,.035,.72,5);
+  for(let i=0;i<46;i++){
+    const a=i/46*Math.PI*2;
+    const radial=1.02+(i%4)*.015;
+    const reed=new THREE.Mesh(reedGeo,reedMat);
+    reed.position.set(Math.cos(a)*pond.rx*radial,.36,Math.sin(a)*pond.rz*radial);
+    reed.rotation.z=(i%5-2)*.025;
+    scene.add(reed);
+  }
+
+  // Water shader with subtle surface waves and view-dependent highlights.
+  const waterGeo=new THREE.CircleGeometry(5.02,128);
+  const waterBase=waterGeo.attributes.position.array.slice();
+  waterGeo.rotateX(-Math.PI/2);
+  const waterMat=new THREE.MeshPhysicalMaterial({
+    color:0x477d78,transparent:true,opacity:.36,roughness:.16,metalness:0,
+    transmission:.08,thickness:.1,ior:1.333,side:THREE.DoubleSide,depthWrite:false
+  });
+  const water=new THREE.Mesh(waterGeo,waterMat);
+  water.scale.z=pond.rz/pond.rx;
+  water.position.y=.04;
+  water.renderOrder=5;
+  scene.add(water);
+
+  // Caustic layer on bottom using thin translucent rings.
+  const causticGroup=new THREE.Group();
+  const causticMat=new THREE.MeshBasicMaterial({color:0xe9fff7,transparent:true,opacity:.055,side:THREE.DoubleSide,depthWrite:false});
+  for(let i=0;i<18;i++){
+    const ring=new THREE.Mesh(new THREE.RingGeometry(.18+.03*(i%3),.205+.03*(i%3),36),causticMat);
+    ring.rotation.x=-Math.PI/2;
+    const a=i*2.399963;
+    const r=.5+((i*37)%100)/100*3.9;
+    ring.position.set(Math.cos(a)*r,pond.bottom+.025,Math.sin(a)*r*.66);
+    ring.scale.set(1.8,.8,1);
+    causticGroup.add(ring);
+  }
+  scene.add(causticGroup);
+
+  // ---------- Procedural koi mesh ----------
+  const fishGroup=new THREE.Group();
+  scene.add(fishGroup);
+
+  const SECTION_COUNT=19,RING=12,LENGTH=1.55;
+  const pos=new Float32Array(SECTION_COUNT*RING*3);
+  const col=new Float32Array(SECTION_COUNT*RING*3);
+  const indices=[];
+  for(let i=0;i<SECTION_COUNT-1;i++){
+    for(let j=0;j<RING;j++){
+      const a=i*RING+j,b=i*RING+(j+1)%RING,c=(i+1)*RING+j,d=(i+1)*RING+(j+1)%RING;
+      indices.push(a,c,b,b,c,d);
+    }
+  }
+  const bodyGeo=new THREE.BufferGeometry();
+  bodyGeo.setAttribute("position",new THREE.BufferAttribute(pos,3));
+  bodyGeo.setAttribute("color",new THREE.BufferAttribute(col,3));
+  bodyGeo.setIndex(indices);
+  bodyGeo.computeVertexNormals();
+
+  const bodyMat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.50,metalness:0,side:THREE.DoubleSide});
+  const bodyMesh=new THREE.Mesh(bodyGeo,bodyMat);
+  bodyMesh.castShadow=true;
+  fishGroup.add(bodyMesh);
+
+  const tailGeo=new THREE.BufferGeometry();
+  tailGeo.setAttribute("position",new THREE.BufferAttribute(new Float32Array(18),3));
+  tailGeo.setIndex([0,1,2,3,4,5]);
+  const tailMat=new THREE.MeshStandardMaterial({color:0xe6e0d6,roughness:.58,side:THREE.DoubleSide,transparent:true,opacity:.92});
+  const tailMesh=new THREE.Mesh(tailGeo,tailMat);tailMesh.castShadow=true;fishGroup.add(tailMesh);
+
+  function finGeometry(side){
+    const arr=new Float32Array([
+       .18,.00, side*.18,
+      -.12,.01, side*.43,
+      -.28,.00, side*.23
+    ]);
+    const g=new THREE.BufferGeometry();
+    g.setAttribute("position",new THREE.BufferAttribute(arr,3));
+    g.setIndex([0,1,2]);
+    return g;
+  }
+  const finMat=new THREE.MeshStandardMaterial({color:0xd9d1c6,roughness:.62,side:THREE.DoubleSide,transparent:true,opacity:.72});
+  const finL=new THREE.Mesh(finGeometry(1),finMat),finR=new THREE.Mesh(finGeometry(-1),finMat);
+  finL.castShadow=finR.castShadow=true;fishGroup.add(finL,finR);
+
+  const dorsalGeo=new THREE.BufferGeometry();
+  dorsalGeo.setAttribute("position",new THREE.BufferAttribute(new Float32Array([
+    .20,.12,0,-.18,.29,0,-.42,.11,0
+  ]),3));
+  dorsalGeo.setIndex([0,1,2]);
+  const dorsal=new THREE.Mesh(dorsalGeo,finMat);fishGroup.add(dorsal);
+
+  const eyeMat=new THREE.MeshStandardMaterial({color:0x101413,roughness:.35});
+  const eyeGeo=new THREE.SphereGeometry(.032,12,8);
+  const eyeL=new THREE.Mesh(eyeGeo,eyeMat),eyeR=new THREE.Mesh(eyeGeo,eyeMat);
+  eyeL.position.set(.55,.075,.105);eyeR.position.set(.55,.075,-.105);
+  fishGroup.add(eyeL,eyeR);
+
+  const fish={
+    x:-1.35,z:.25,heading:.08,
+    speed:.54,targetSpeed:.54,
+    depth:.46,targetDepth:.46,
+    verticalVelocity:0,turnRate:0,
+    phase:0,state:"cruise",stateTimer:7,
+    orbitSign:1,bodyWave:0
+  };
+
+  let running=false,paused=false,lastTime=performance.now();
+  const views=["pond","follow","pov"];
+  let viewIndex=0,viewMode="pond",lightIndex=0;
+  let attract=null,attractTimer=0,rippleTimer=0;
+
+  function wrap(a){while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a}
+  function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+  function normEdge(x,z){return Math.sqrt((x/pond.rx)**2+(z/pond.rz)**2)}
+  function fishY(){return -.28-fish.depth*1.88}
+
+  function setBehavior(){
+    const r=Math.random();
+    if(r<.18){fish.state="coast";fish.targetSpeed=.16+Math.random()*.08;fish.stateTimer=4+Math.random()*4;observationText.textContent="尾びれをほとんど止め、惰性だけで流れています。";}
+    else if(r<.34){fish.state="surface";fish.targetDepth=.10+Math.random()*.08;fish.targetSpeed=.34+Math.random()*.12;fish.stateTimer=5+Math.random()*4;observationText.textContent="胸びれで姿勢を整えながら、水面へ上がっています。";}
+    else if(r<.48){fish.state="deep";fish.targetDepth=.76+Math.random()*.12;fish.targetSpeed=.38+Math.random()*.14;fish.stateTimer=6+Math.random()*5;observationText.textContent="ゆっくり深場へ降りています。";}
+    else{fish.state="cruise";fish.targetDepth=.32+Math.random()*.34;fish.targetSpeed=.42+Math.random()*.22;fish.stateTimer=7+Math.random()*8;observationText.textContent="一定のリズムで池を巡っています。";}
+    if(Math.random()<.28)fish.orbitSign*=-1;
+  }
+
+  function obstacleSteering(){
+    const look=1.2+fish.speed*1.2;
+    const fx=fish.x+Math.cos(fish.heading)*look;
+    const fz=fish.z+Math.sin(fish.heading)*look;
+    let steer=0;
+    for(const [rx,,rz,sx,sz] of rocks){
+      const rad=Math.max(sx,sz)+.44;
+      const dx=fx-rx,dz=fz-rz,d=Math.hypot(dx,dz);
+      if(d<rad){
+        const away=Math.atan2(fz-rz,fx-rx);
+        let diff=wrap(away-fish.heading);
+        if(Math.abs(diff)<.18)diff=fish.orbitSign*.55;
+        steer+=clamp(diff,-1,1)*(1-d/rad)*1.8;
+      }
+    }
+    return steer;
+  }
+
+  function updateFish(dt,time){
+    fish.stateTimer-=dt;
+    if(fish.stateTimer<=0)setBehavior();
+    attractTimer=Math.max(0,attractTimer-dt);
+
+    const edge=normEdge(fish.x,fish.z);
+    const centerHeading=Math.atan2(-fish.z,-fish.x);
+    const tangent=centerHeading+fish.orbitSign*Math.PI/2;
+    const inward=clamp((edge-.56)/.32,0,1);
+    let desired=wrap(tangent+wrap(centerHeading-tangent)*inward);
+
+    desired+=Math.sin(time*.00022+fish.orbitSign)*.12;
+
+    if(attractTimer>0&&attract){
+      desired=Math.atan2(attract.z-fish.z,attract.x-fish.x);
+      fish.targetSpeed=.72;
+      fish.targetDepth=.18;
+      fish.state="investigate";
+    }
+
+    desired=wrap(desired+obstacleSteering());
+
+    if(edge>.84){
+      const strength=clamp((edge-.84)/.12,0,1);
+      desired=wrap(desired+wrap(centerHeading-desired)*strength);
+      fish.targetSpeed=Math.min(fish.targetSpeed,.44);
+    }
+
+    const err=wrap(desired-fish.heading);
+    const maxTurn=.72+.38*(1-clamp(fish.speed/.75,0,1));
+    const targetTurn=clamp(err*1.15,-maxTurn,maxTurn);
+    fish.turnRate+=(targetTurn-fish.turnRate)*Math.min(1,dt*(1.4+fish.speed*1.2));
+    fish.heading=wrap(fish.heading+fish.turnRate*dt);
+
+    // Acceleration is deliberately asymmetric: acceleration is slower than deceleration.
+    const accelRate=fish.targetSpeed>fish.speed?.52:.92;
+    fish.speed+=(fish.targetSpeed-fish.speed)*Math.min(1,dt*accelRate);
+    fish.speed=clamp(fish.speed,.08,.82);
+
+    const depthError=fish.targetDepth-fish.depth;
+    fish.verticalVelocity+=depthError*dt*.42;
+    fish.verticalVelocity*=Math.pow(.22,dt);
+    fish.depth=clamp(fish.depth+fish.verticalVelocity*dt,0.06,.94);
+
+    const surge=.986+.014*Math.sin(fish.phase);
+    fish.x+=Math.cos(fish.heading)*fish.speed*surge*dt;
+    fish.z+=Math.sin(fish.heading)*fish.speed*surge*dt;
+
+    if(normEdge(fish.x,fish.z)>.965){
+      fish.heading=centerHeading;
+      fish.x+=Math.cos(centerHeading)*.05;
+      fish.z+=Math.sin(centerHeading)*.05;
+    }
+
+    const tailHz=.65+fish.speed*1.75;
+    fish.phase+=dt*tailHz*Math.PI*2;
+    fish.bodyWave=(.025+fish.speed*.105);
+
+    if(attractTimer>0&&attract&&Math.hypot(fish.x-attract.x,fish.z-attract.z)<.38){
+      attractTimer=0;attract=null;
+      fish.state="coast";fish.targetSpeed=.13;fish.stateTimer=3;
+      observationText.textContent="刺激のあった場所で減速し、周囲を確かめています。";
+    }
+
+    fishGroup.position.set(fish.x,fishY(),fish.z);
+    fishGroup.rotation.y=-fish.heading;
+    updateKoiMesh(time);
+  }
+
+  function radiusProfile(u){
+    const core=Math.sin(Math.PI*Math.pow(u,.88));
+    const nose=.11*(1-u);
+    const tail=.035+.025*(1-u);
+    return tail+core*.185+nose;
+  }
+
+  function updateKoiMesh(time){
+    const p=bodyGeo.attributes.position.array;
+    const colors=bodyGeo.attributes.color.array;
+    const amp=fish.bodyWave;
+    const turnBias=fish.turnRate*.095;
+    for(let i=0;i<SECTION_COUNT;i++){
+      const u=i/(SECTION_COUNT-1);
+      const x=LENGTH*.5-u*LENGTH;
+      const wave=Math.sin(fish.phase-u*5.0)*amp*Math.pow(u,1.55);
+      const curvature=-turnBias*Math.pow(u,1.65);
+      const centerZ=wave+curvature;
+      const rad=radiusProfile(u);
+      const vertical=rad*(.73-.15*u);
+      for(let j=0;j<RING;j++){
+        const th=j/RING*Math.PI*2;
+        const k=(i*RING+j)*3;
+        p[k]=x;
+        p[k+1]=Math.sin(th)*vertical;
+        p[k+2]=centerZ+Math.cos(th)*rad;
+
+        const patchA=Math.sin(u*13.2+Math.cos(th)*2.8)+.55*Math.sin(u*5.2-th*1.7);
+        const patchB=Math.sin(u*18.8-th*2.3+1.2)+Math.cos(u*6.7+th);
+        let c;
+        if(patchB>1.47&&u<.62)c=[.10,.12,.11];
+        else if(patchA>.82)c=[.73,.25,.16];
+        else c=[.86,.83,.78];
+        colors[k]=c[0];colors[k+1]=c[1];colors[k+2]=c[2];
+      }
+    }
+    bodyGeo.attributes.position.needsUpdate=true;
+    bodyGeo.attributes.color.needsUpdate=true;
+    bodyGeo.computeVertexNormals();
+
+    const u=1;
+    const tailCenter=Math.sin(fish.phase-u*5.0)*amp+(-turnBias);
+    const tailSwing=Math.sin(fish.phase-.45)*(.18+fish.speed*.10);
+    const tp=tailGeo.attributes.position.array;
+    const vals=[
+      -.68,.00,tailCenter+.035,
+      -.93,.02,tailCenter+.28+tailSwing,
+      -.98,.00,tailCenter,
+      -.68,.00,tailCenter-.035,
+      -.93,.02,tailCenter-.28+tailSwing,
+      -.98,.00,tailCenter
+    ];
+    for(let i=0;i<18;i++)tp[i]=vals[i];
+    tailGeo.attributes.position.needsUpdate=true;
+    tailGeo.computeVertexNormals();
+
+    const finBeat=.035*Math.sin(fish.phase*.52);
+    finL.rotation.x=.12+finBeat+fish.turnRate*.16;
+    finR.rotation.x=-.12-finBeat+fish.turnRate*.16;
+    dorsal.rotation.z=-fish.turnRate*.08;
+  }
+
+  function updateWater(time){
+    const a=water.geometry.attributes.position;
+    const arr=a.array;
+    for(let i=0;i<arr.length;i+=3){
+      const ox=waterBase[i],oy=waterBase[i+1];
+      arr[i+2]=Math.sin(ox*1.7+time*.0012)*.018+Math.sin(oy*2.15-time*.0008)*.013;
+    }
+    a.needsUpdate=true;
+    water.geometry.computeVertexNormals();
+    causticGroup.rotation.y=Math.sin(time*.00018)*.12;
+    for(let i=0;i<causticGroup.children.length;i++){
+      const c=causticGroup.children[i];
+      const s=1+.16*Math.sin(time*.001+i*.7);
+      c.scale.x=1.7*s;c.scale.y=.75/s;
+    }
+  }
+
+  function updateCamera(dt){
+    const fy=fishY();
+    const dir=new THREE.Vector3(Math.cos(fish.heading),0,Math.sin(fish.heading));
+    const side=new THREE.Vector3(-dir.z,0,dir.x);
+
+    if(viewMode==="pond"){
+      cameraDesired.set(0,7.8,7.7);
+      cameraTarget.set(0,-.55,0);
+    }else if(viewMode==="follow"){
+      cameraDesired.set(fish.x-dir.x*2.35+side.x*.55,fy+1.35,fish.z-dir.z*2.35+side.z*.55);
+      cameraTarget.set(fish.x+dir.x*.55,fy+.05,fish.z+dir.z*.55);
+    }else{
+      cameraDesired.set(fish.x+dir.x*.58,fy+.045,fish.z+dir.z*.58);
+      cameraTarget.set(fish.x+dir.x*4.5,fy+fish.verticalVelocity*.6,fish.z+dir.z*4.5);
+    }
+
+    const follow=viewMode==="pov"?7.5:3.6;
+    camera.position.lerp(cameraDesired,1-Math.exp(-dt*follow));
+    camera.lookAt(cameraTarget);
+
+    const desiredFov=viewMode==="pov"?64:(viewMode==="follow"?48:46);
+    camera.fov+=(desiredFov-camera.fov)*(1-Math.exp(-dt*3));
+    camera.updateProjectionMatrix();
+
+    if(viewMode==="pov"){
+      scene.fog.density=.085+.025*fish.depth;
+      waterMat.opacity=.17;
+    }else{
+      scene.fog.density=.045;
+      waterMat.opacity=.34;
+    }
+  }
+
+  function setLight(index){
+    lightIndex=index;
+    const p=lightPresets[index];
+    scene.background.setHex(p.bg);
+    scene.fog.color.setHex(p.fog);
+    hemi.intensity=p.hemi;
+    sun.intensity=p.sun;
+    sun.color.setHex(p.sunColor);
+    waterMat.color.setRGB(p.water[0],p.water[1],p.water[2]);
+    lightLabel.textContent=p.name;
+  }
+
+  function updateLabels(){
+    stateText.textContent=
+      fish.state==="coast"?"尾びれを休めています。":
+      fish.state==="surface"?"水面へ上がっています。":
+      fish.state==="deep"?"深場へ降りています。":
+      fish.state==="investigate"?"水面の刺激へ近づいています。":
+      "ゆっくり泳いでいます。";
+    depthText.textContent="DEPTH "+Math.round(.12+fish.depth*1.72)+" m";
+    speedText.textContent="SPEED "+fish.speed.toFixed(2)+" m/s";
+    headingText.textContent="Heading "+Math.round((fish.heading*180/Math.PI+360)%360)+"°";
+  }
+
+  function cycleView(){
+    if(!running)return;
+    viewIndex=(viewIndex+1)%views.length;viewMode=views[viewIndex];
+    const label={pond:"POND VIEW",follow:"FOLLOW",pov:"KOI POV"}[viewMode];
+    viewBadge.textContent=label;viewName.textContent=label.replace(" VIEW","");
+  }
+
+  function attractKoi(){
+    if(!running||paused)return;
+    const a=Math.atan2(fish.z,fish.x)+Math.PI+(Math.random()-.5)*1.0;
+    const rr=1.0+Math.random()*.85;
+    attract={x:Math.cos(a)*rr,z:Math.sin(a)*rr*.7};
+    attractTimer=8;
+    rippleTimer=1.5;
+    observationText.textContent="水面の振動へ向きを変えました。";
+  }
+
+  function updateRipple(dt){
+    rippleTimer=Math.max(0,rippleTimer-dt);
+    if(!rippleMesh)return;
+    rippleMesh.visible=rippleTimer>0;
+    if(rippleTimer>0&&attract){
+      rippleMesh.position.set(attract.x,.065,attract.z);
+      const t=1-rippleTimer/1.5;
+      const s=.35+t*1.7;
+      rippleMesh.scale.set(s,s,s);
+      rippleMat.opacity=(1-t)*.35;
+    }
+  }
+
+  const rippleMat=new THREE.MeshBasicMaterial({color:0xe7fff8,transparent:true,opacity:.3,side:THREE.DoubleSide,depthWrite:false});
+  const rippleMesh=new THREE.Mesh(new THREE.RingGeometry(.18,.205,48),rippleMat);
+  rippleMesh.rotation.x=-Math.PI/2;rippleMesh.visible=false;scene.add(rippleMesh);
+
+  function resize(){
+    const rect=canvas.getBoundingClientRect();
+    const w=Math.max(320,Math.round(rect.width||960));
+    const h=Math.round(w*600/960);
+    renderer.setSize(w,h,false);
+    camera.aspect=w/h;camera.updateProjectionMatrix();
+  }
+  window.addEventListener("resize",resize);
+  resize();
+
+  enterButton.addEventListener("click",()=>{running=true;intro.hidden=true;observationText.textContent="体のしなりと尾びれの遅れを眺めてみてください。";});
+  pauseButton.addEventListener("click",()=>{if(!running)return;paused=!paused;pauseButton.textContent=paused?"RESUME":"PAUSE";pauseButton.setAttribute("aria-pressed",paused?"true":"false")});
+  viewButton.addEventListener("click",cycleView);
+  attractButton.addEventListener("click",attractKoi);
+  lightButton.addEventListener("click",()=>setLight((lightIndex+1)%lightPresets.length));
+
+  canvas.addEventListener("pointerdown",e=>{
+    if(!running||paused||viewMode==="pov")return;
+    const rect=canvas.getBoundingClientRect();
+    const ndc=new THREE.Vector2((e.clientX-rect.left)/rect.width*2-1,-((e.clientY-rect.top)/rect.height)*2+1);
+    const ray=new THREE.Raycaster();
+    ray.setFromCamera(ndc,camera);
+    const plane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
+    const point=new THREE.Vector3();
+    if(ray.ray.intersectPlane(plane,point)){
+      const edge=Math.sqrt((point.x/pond.rx)**2+(point.z/pond.rz)**2);
+      if(edge<.93){
+        attract={x:point.x,z:point.z};attractTimer=8;rippleTimer=1.5;
+        observationText.textContent="水面の小さな刺激に反応しました。";
+      }
+    }
+  });
+
+  setLight(0);
+  updateKoiMesh(0);
+  updateCamera(.016);
+  updateLabels();
+
+  function animate(time){
+    const dt=Math.min(.035,Math.max(0,(time-lastTime)/1000||.016));
+    lastTime=time;
+    if(running&&!paused){
+      updateFish(dt,time);
+      updateWater(time);
+      updateRipple(dt);
+      updateCamera(dt);
+      updateLabels();
+    }else{
+      updateWater(time);
+      updateCamera(dt*.3);
+    }
+    renderer.render(scene,camera);
+  }
+  renderer.setAnimationLoop(animate);
 }
 
-function drawPOV(){
- const L=lights[lightIndex];
- const depth=fish.depth;
- const horizon=H*(.34+depth*.10);
- const g=ctx.createLinearGradient(0,0,0,H);
- g.addColorStop(0,lightIndex===2?"#71847f":"#9fbeb2");
- g.addColorStop(horizon/H,lightIndex===1?"#688b7e":"#5f938a");
- g.addColorStop(1,"#1f3a35");
- ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
-
- const rel=relativePondGeometry();
- drawPovFloor(rel,L,horizon);
- drawPovBoundary(rel,L,horizon);
- drawPovRocks(rel,L,horizon);
- drawPovLight(L,horizon);
- drawPovNose();
- drawVignette();
-}
-function relativePondGeometry(){
- const dx=fish.x-pond.cx,dy=fish.y-pond.cy;
- const nx=dx/pond.rx,ny=dy/pond.ry;
- const localX=nx*Math.cos(fish.heading)+ny*Math.sin(fish.heading);
- const localY=-nx*Math.sin(fish.heading)+ny*Math.cos(fish.heading);
- return{edge:clamp(normEdge(fish.x,fish.y),0,1.2),side:localY,forward:localX};
-}
-function projectWorld(wx,wy,baseY){
- const dx=wx-fish.x,dy=wy-fish.y;
- const c=Math.cos(-fish.heading),s=Math.sin(-fish.heading);
- const fx=dx*c-dy*s,fy=dx*s+dy*c;
- if(fx<8)return null;
- const scale=420/fx;
- return{x:W/2+fy*scale*.9,y:baseY+85*scale*.22,scale:clamp(scale*.055,.15,2.4),dist:fx};
-}
-function drawPovFloor(rel,L,horizon){
- const floor=ctx.createLinearGradient(0,horizon,0,H);
- floor.addColorStop(0,"rgba(31,67,60,.18)");floor.addColorStop(1,"rgba(45,62,49,.78)");
- ctx.fillStyle=floor;ctx.fillRect(0,horizon,W,H-horizon);
- ctx.strokeStyle="rgba(215,232,214,.07)";ctx.lineWidth=1;
- for(let i=0;i<11;i++){
-  const y=horizon+Math.pow(i/10,1.7)*(H-horizon);
-  ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();
- }
-}
-function drawPovBoundary(rel,L,horizon){
- const samples=80,pts=[];
- for(let i=0;i<samples;i++){
-  const a=i/(samples-1)*Math.PI*2;
-  const wx=pond.cx+Math.cos(a)*pond.rx,wy=pond.cy+Math.sin(a)*pond.ry;
-  const p=projectWorld(wx,wy,horizon);
-  if(p&&p.dist<650)pts.push(p);
- }
- ctx.fillStyle=lightIndex===1?"rgba(86,76,49,.58)":"rgba(50,73,54,.58)";
- for(const p of pts){
-  const h=clamp(28*p.scale,4,52);
-  ctx.fillRect(p.x-2,p.y-h,4,h);
- }
-}
-function drawPovRocks(rel,L,horizon){
- const visible=[];
- for(const r of rocks){const p=projectWorld(r.x,r.y,horizon);if(p&&p.dist<520)visible.push({p,r})}
- visible.sort((a,b)=>b.p.dist-a.p.dist);
- for(const item of visible){
-  const p=item.p,r=item.r;
-  const rx=clamp(r.r*p.scale*.75,3,55),ry=rx*.48;
-  const gg=ctx.createRadialGradient(p.x-rx*.25,p.y-ry*.25,1,p.x,p.y,rx);
-  gg.addColorStop(0,"#89948a");gg.addColorStop(1,"#3a4941");
-  ctx.globalAlpha=.68;ctx.fillStyle=gg;ctx.beginPath();ctx.ellipse(p.x,p.y,rx,ry,r.t,0,Math.PI*2);ctx.fill();
- }
- ctx.globalAlpha=1;
-}
-function drawPovLight(L,horizon){
- const t=performance.now()*.001;
- ctx.globalAlpha=.06+.08*L.sun;ctx.strokeStyle="#f3fff8";ctx.lineWidth=2;
- for(let i=0;i<8;i++){
-  const x=(i+1)*W/9+Math.sin(t*.45+i)*18;
-  ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x-55+Math.sin(t+i)*18,horizon+120);ctx.stroke();
- }
- ctx.globalAlpha=1;
-}
-function drawPovNose(){
- const g=ctx.createLinearGradient(W/2-45,H,W/2+45,H-80);
- g.addColorStop(0,"rgba(213,207,198,.18)");g.addColorStop(.5,"rgba(237,232,224,.42)");g.addColorStop(1,"rgba(183,177,168,.18)");
- ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(W/2-38,H);ctx.quadraticCurveTo(W/2-25,H-54,W/2,H-66);ctx.quadraticCurveTo(W/2+25,H-54,W/2+38,H);ctx.closePath();ctx.fill();
-}
-
-enterButton.addEventListener("click",enter);
-pauseButton.addEventListener("click",togglePause);
-viewButton.addEventListener("click",cycleView);
-lightButton.addEventListener("click",cycleLight);
-attractButton.addEventListener("click",attractKoi);
-canvas.addEventListener("pointerdown",e=>{
- if(!running||paused)return;
- const r=canvas.getBoundingClientRect();
- const sx=(e.clientX-r.left)/r.width*W,sy=(e.clientY-r.top)/r.height*H;
- if(viewMode!=="pov"){
-   const wx=(sx-W/2)/cam.scale+cam.x,wy=(sy-H/2)/cam.scale+cam.y;
-   if(inside(wx,wy,.95)){attract={x:wx,y:wy};attractTimer=7;ripple={x:wx,y:wy,r:4};rippleLife=1;fish.state="investigate";fish.stateTimer=5}
- }
+boot().catch(err=>{
+  console.error(err);
+  const o=document.getElementById("observationText");
+  if(o)o.textContent="3D描画の初期化に失敗しました。";
 });
-window.addEventListener("blur",()=>{if(running&&!paused)togglePause()});
-
-function frame(now){
- const dt=Math.max(0,Math.min(.035,(now-lastTime)/1000));
- lastTime=now;update(dt);draw();requestAnimationFrame(frame);
-}
-updateViewLabels();draw();requestAnimationFrame(frame);
 })();
