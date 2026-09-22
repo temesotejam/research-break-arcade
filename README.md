@@ -79,7 +79,13 @@
 - 動く主体はローバー1台だけ
 - Three.js 0.186.0 を固定利用した3D WebGL描画
 - CURIOSITY / CAUTION / SELF-IMPROVE の性格値を個体ごとに生成
-- 探索、充電、自己改造、ゲート起動、次マップ移動を毎回スコアリングして自律選択
+- 高レベルMISSIONを自律選択し、そのMISSIONを複数ステップに分解して継続実行
+- INVESTIGATE / BUILD UPGRADE / OPEN THE GATE / CROSS THE GATE / SURVEY UNMAPPED SECTOR を目的として選択
+- 移動はMISSION達成のための手段とし、NEW VIEWPOINT単体を目的として選ばない
+- BUILD UPGRADEでは不足部品を探す → 回収 → 自己改造まで同じMISSIONを維持
+- OPEN THE GATEではゲート探索 / キーアイテム探索 / 運搬 / 起動を1つのMISSIONとして継続
+- SURVEYは2〜4個の観測地点という明確な完了条件を持ち、新規異常を発見するとINVESTIGATEへ切り替える
+- MISSIONはLocal Storageへ保存し、ページを開き直しても目的を維持
 - 未発見物の座標は意思決定に使用せず、マストカメラの実視野に入った物だけを新規認識
 - マストカメラは約±95°パン、上28° / 下72°チルトで自律走査
 - 停止して繰り返す CAMERA SEARCH 状態は廃止
