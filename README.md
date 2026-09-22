@@ -72,24 +72,25 @@
 
 公開ページ: `orbit.html`
 
-## Quiet Mode — Quiet Koi
+## Autonomous Mode — Tiny Rover
 
-1匹の鯉だけを観察する、目的・スコア・ゲームオーバーのない静かなモードです。
+1台の小型探査ローバーが自律的にフィールドを探索する観察モードです。
 
-- 動く生き物は鯉1匹だけ
+- 動く主体はローバー1台だけ
 - Three.js 0.186.0 を固定利用した3D WebGL描画
-- 十数断面の動的メッシュで頭→胴→尾へ遅れてしなりが伝わる
-- 慣性を持った旋回・加減速と、速度に応じた尾びれ周期
-- 岸と底石を先読みして回避する行動モデル
-- 水面付近 / 深場を自律的に行き来する
-- 透明な水面、3Dの底石、影、動くコースティクスで池を表現
-- VIEWで POND / FOLLOW / KOI POV を切り替え
-- KOI POV は鯉の頭部位置から見る実際の3Dカメラ
-- COME HERE で水面に1回だけ刺激を与え、鯉の注意を向けられる
-- LIGHT で午後 / 夕方 / 曇天の光を切り替え
+- SURVEY → TARGET LOCK → DRIVE → SCAN → APPROACH → ARM DEPLOY → SAMPLE → LOG の自律行動ループ
+- 興味度の低い岩はスキャンだけで通過し、興味度が高い対象だけ接触調査
+- 岩を先読みして回避し、進めない時は自動でバックして経路復帰
+- 6輪ローバー、マストカメラ、太陽電池、可動ロボットアームを3Dで表現
+- 地形の傾斜に合わせて車体がピッチ・ロール
+- バッテリーが減ると自動で停止して太陽電池充電
+- VIEWで OVERVIEW / FOLLOW / ROVER CAM / ARM CAM を切り替え
+- ミッションログで現在の判断と行動を追える
 - 時間制限なし、スコアなし
 
-公開ページ: `pond.html`
+公開ページ: `rover.html`
+
+旧 `pond.html` は Tiny Rover へリダイレクトします。
 
 ## Run locally
 
@@ -122,6 +123,7 @@
 - `orbit.html` — Orbit Sling UI
 - `orbit.css` — Orbit Sling デザイン
 - `orbit.js` — Orbit Sling ゲームロジック / Canvas描画
-- `pond.html` — Quiet Koi UI
-- `pond.css` — Quiet Koi デザイン
-- `pond.js` — 1匹の鯉の行動シミュレーション / FOLLOW・KOI POVカメラ
+- `rover.html` — Tiny Rover UI
+- `rover.css` — Tiny Rover デザイン
+- `rover.js` — Tiny Rover 自律行動 / 3Dフィールド / 4視点カメラ
+- `pond.html` — Tiny Rover への互換リダイレクト
