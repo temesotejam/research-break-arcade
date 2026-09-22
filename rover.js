@@ -8,6 +8,7 @@ async function boot(){
   const canvas=$("roverCanvas"),intro=$("intro"),enterButton=$("enterButton"),pauseButton=$("pauseButton");
   const viewButton=$("viewButton"),lightButton=$("lightButton"),newLifeButton=$("newLifeButton");
   const viewBadge=$("viewBadge"),decisionBadge=$("decisionBadge"),viewName=$("viewName"),stateText=$("stateText"),mapText=$("mapText");
+  const missionText=$("missionText"),missionStepText=$("missionStepText");
   const activityText=$("activityText"),detailText=$("detailText"),batteryText=$("batteryText"),speedText=$("speedText");
   const partsText=$("partsText"),sampleText=$("sampleText"),exploreText=$("exploreText"),headingText=$("headingText");
   const lightLabel=$("lightLabel"),logList=$("logList"),upgradeList=$("upgradeList"),inventoryList=$("inventoryList");
@@ -102,6 +103,7 @@ async function boot(){
   function saveLife(){
     life.battery=roverState.battery;
     life.position={mapIndex:life.mapIndex,x:roverState.x,z:roverState.z,heading:roverState.heading};
+    life.currentMission=roverState&&roverState.mission?structuredClone(roverState.mission):null;
     life.lastSeen=Date.now();
     try{localStorage.setItem(SAVE_KEY,JSON.stringify(life))}catch(_){}
   }
@@ -265,7 +267,8 @@ async function boot(){
     x:0,z:0,heading:.35,speed:0,targetSpeed:0,battery:clamp(life.battery||100,0,maxBattery()),state:"THINK",timer:1.2,
     targetZone:null,goal:null,navPurpose:null,prevDist:Infinity,stuckTime:0,recoverSign:1,
     mastYaw:0,mastPitch:-.08,mastYawTarget:0,mastPitchTarget:-.08,movingScanPhase:0,
-    armProgress:0,armVisual:0,scanProgress:0,yawRate:0,wheelAngleL:0,wheelAngleR:0,upgradeChoice:null
+    armProgress:0,armVisual:0,scanProgress:0,yawRate:0,wheelAngleL:0,wheelAngleR:0,upgradeChoice:null,
+    mission:(life.currentMission&&life.currentMission.mapIndex===life.mapIndex)?structuredClone(life.currentMission):null
   };
   if(life.position&&life.position.mapIndex===life.mapIndex){roverState.x=life.position.x;roverState.z=life.position.z;roverState.heading=life.position.heading}
   let running=false,paused=false,lastTime=performance.now(),saveTimer=0;
@@ -332,46 +335,168 @@ async function boot(){
       solar:clamp(e.charges*.20+life.mapIndex*.05,0,1)
     };
   }
-  function bestUpgradeCandidate(){
+  function desiredUpgradeCandidate(){
     const needs=upgradeNeeds();let best=null;
     for(const [id,d] of Object.entries(UPGRADE_DEFS)){
-      if(has(id)||life.parts<d.cost)continue;
-      const score=life.personality.improve*48+needs[id]*52+Math.random()*8;
+      if(has(id))continue;
+      const score=life.personality.improve*34+needs[id]*52+(life.parts>=d.cost?13:0)+Math.random()*7;
       if(!best||score>best.score)best={id,score,cost:d.cost,label:d.label,need:needs[id]};
     }
     return best;
   }
 
-  function think(){
-    roverState.state="THINK";roverState.timer=.85+rnd(.25,.8);roverState.speed=0;roverState.yawRate=0;roverState.armProgress=0;decisionBadge.textContent="THINKING…";
+  function missionZone(){
+    const m=roverState.mission;
+    return m&&m.targetId?zones.find(z=>z.id===m.targetId)||null:null;
   }
 
-  function chooseAction(){
-    const m=mem(),exp=exploration(),unknown=knownUnexplored(),unseen=unseenZones(),p=life.personality;
+  function setMission(m,reason=""){
+    roverState.mission={...m,mapIndex:life.mapIndex,startedAt:Date.now()};
+    life.currentMission=structuredClone(roverState.mission);
+    log("mission: "+roverState.mission.label.toLowerCase()+(reason?" · "+reason:""));
+    decisionBadge.textContent="MISSION · "+roverState.mission.label;
+    saveLife();
+  }
+
+  function finishMission(note="complete"){
+    const old=roverState.mission;
+    if(old)log("mission complete · "+old.label.toLowerCase()+" · "+note);
+    roverState.mission=null;life.currentMission=null;saveLife();think();
+  }
+
+  function abortMission(note="replan"){
+    const old=roverState.mission;
+    if(old)log("mission replan · "+old.label.toLowerCase()+" · "+note);
+    roverState.mission=null;life.currentMission=null;saveLife();think();
+  }
+
+  function think(){
+    roverState.state="THINK";roverState.timer=.72+rnd(.20,.65);roverState.speed=0;roverState.yawRate=0;roverState.armProgress=0;
+    decisionBadge.textContent=roverState.mission?"MISSION · "+roverState.mission.label:"THINKING…";
+  }
+
+  function chooseMission(){
+    const m=mem(),unknown=knownUnexplored(),p=life.personality,exp=exploration();
     const options=[];
-    if(roverState.battery<32+p.caution*18)options.push({type:"charge",score:65+(maxBattery()-roverState.battery)*.7+p.caution*20,label:"CHARGE"});
-    const up=bestUpgradeCandidate();if(up)options.push({type:"upgrade",score:up.score,label:"SELF-UPGRADE",upgrade:up});
-    if(m.gateKnown&&m.coreHeld&&!m.gateActivated)options.push({type:"activate",score:58+p.curiosity*19+exp*12,label:"ACTIVATE GATE"});
-    if(m.gateActivated)options.push({type:"enter",score:25+p.curiosity*46+exp*45-p.caution*14+(unknown.length===0?24:0),label:"ENTER GATE"});
+
     for(const z of unknown){
       const d=Math.hypot(z.x-roverState.x,z.z-roverState.z);
-      options.push({type:"explore",zone:z,score:38+p.curiosity*34-p.caution*d*1.15+Math.random()*13+(unknown.length<3?6:0),label:"EXPLORE "+z.id});
+      const cls=recognitionLabel(z);
+      const mystery=cls==="?"?24:0;
+      const utility=z.kind==="parts"?18:(z.kind==="core"?28:(z.kind==="gate"?22:5));
+      options.push({
+        type:"investigate",targetId:z.id,label:"INVESTIGATE "+z.id,
+        score:68+mystery+utility+p.curiosity*22-p.caution*d*.55+Math.random()*8
+      });
     }
-    if(unseen.length){
-      options.push({type:"frontier",score:44+p.curiosity*40-p.caution*5+Math.random()*10,label:"NEW VIEWPOINT"});
-    }
-    if(!options.length)options.push({type:"frontier",score:30,label:"NEW VIEWPOINT"});
-    options.sort((a,b)=>b.score-a.score);const pick=options[0],runner=options[1];
-    decisionBadge.textContent="CHOICE · "+pick.label;
-    log("choice: "+pick.label.toLowerCase()+(runner?" · alt "+runner.label.toLowerCase():""));
 
-    if(pick.type==="charge"){startCharge();return}
-    if(pick.type==="upgrade"){startUpgrade(pick.upgrade);return}
-    if(pick.type==="activate"){navigateToGate("activate");return}
-    if(pick.type==="enter"){navigateToGate("enter");return}
-    if(pick.type==="explore"){navigateToZone(pick.zone);return}
-    if(pick.type==="frontier"){startFrontierTravel();return}
-    startFrontierTravel();
+    if(m.gateActivated){
+      options.push({type:"crossGate",label:"CROSS THE GATE",score:52+p.curiosity*30+exp*28-p.caution*8+Math.random()*5});
+    }else if(m.gateKnown||m.coreHeld){
+      options.push({type:"openGate",label:"OPEN THE GATE",score:66+p.curiosity*18+(m.gateKnown&&m.coreHeld?28:0)+Math.random()*5});
+    }
+
+    const up=desiredUpgradeCandidate();
+    if(up){
+      const progress=clamp(life.parts/up.cost,0,1);
+      options.push({
+        type:"upgrade",upgradeId:up.id,label:"BUILD "+up.label,
+        score:34+p.improve*42+up.need*25+progress*16+Math.random()*7
+      });
+    }
+
+    options.push({
+      type:"survey",label:"SURVEY UNMAPPED SECTOR",
+      remaining:2+Math.round(p.curiosity*2),
+      score:34+p.curiosity*33+(unseenZones().length?12:0)+Math.random()*7
+    });
+
+    options.sort((a,b)=>b.score-a.score);
+    const pick=options[0];
+    setMission(pick,"self-selected objective");
+    continueMission();
+  }
+
+  function knownSalvageTargets(){
+    const m=mem(),done=new Set(m.discovered);
+    return zones.filter(z=>z.kind==="parts"&&m.seen.includes(z.id)&&!done.has(z.id));
+  }
+
+  function startFrontierTravel(purposeLabel="survey"){
+    const g=chooseFrontierGoal();
+    roverState.movingScanPhase=0;
+    startNavigation({x:g.x,z:g.z},"frontier",null,has("suspension")?.86:.68);
+    decisionBadge.textContent="MISSION · "+(roverState.mission?roverState.mission.label:"SURVEY");
+    log(purposeLabel+" · viewpoint "+g.k);
+  }
+
+  function continueMission(){
+    const mission=roverState.mission;
+    if(!mission){chooseMission();return}
+
+    const m=mem();
+    if(roverState.battery<28+life.personality.caution*16){
+      startCharge();return;
+    }
+
+    if(mission.type==="investigate"){
+      const z=missionZone();
+      if(!z){abortMission("target unavailable");return}
+      if(m.discovered.includes(z.id)){finishMission("target understood");return}
+      if(!m.seen.includes(z.id)){abortMission("visual contact lost");return}
+      navigateToZone(z);return;
+    }
+
+    if(mission.type==="upgrade"){
+      const d=UPGRADE_DEFS[mission.upgradeId];
+      if(!d||has(mission.upgradeId)){finishMission("upgrade installed");return}
+      if(life.parts>=d.cost){
+        startUpgrade({id:mission.upgradeId,label:d.label,cost:d.cost,score:0,need:1});return;
+      }
+      const salvage=knownSalvageTargets().sort((a,b)=>
+        Math.hypot(a.x-roverState.x,a.z-roverState.z)-Math.hypot(b.x-roverState.x,b.z-roverState.z)
+      )[0];
+      if(salvage){navigateToZone(salvage);return}
+      mission.step="SEARCHING FOR "+(d.cost-life.parts)+" PART"+(d.cost-life.parts===1?"":"S");
+      mission.searchSteps=(mission.searchSteps||0)+1;
+      startFrontierTravel("search salvage");return;
+    }
+
+    if(mission.type==="openGate"){
+      const gate=gateZone();
+      if(m.gateActivated){finishMission("gateway online");return}
+      if(m.gateKnown&&m.coreHeld){navigateToGate("activate");return}
+
+      if(!m.coreHeld){
+        const core=zones.find(z=>z.kind==="core"&&m.seen.includes(z.id)&&!m.discovered.includes(z.id));
+        if(core){navigateToZone(core);return}
+      }
+      if(!m.gateKnown){
+        const knownGate=zones.find(z=>z.kind==="gate"&&m.seen.includes(z.id)&&!m.discovered.includes(z.id));
+        if(knownGate){navigateToZone(knownGate);return}
+      }
+      mission.step=!m.gateKnown?"LOCATING STRUCTURE":"SEARCHING FOR COMPATIBLE ARTIFACT";
+      mission.searchSteps=(mission.searchSteps||0)+1;
+      startFrontierTravel(mission.step.toLowerCase());return;
+    }
+
+    if(mission.type==="crossGate"){
+      if(!m.gateActivated){abortMission("gate no longer available");return}
+      navigateToGate("enter");return;
+    }
+
+    if(mission.type==="survey"){
+      if((mission.remaining||0)<=0){finishMission("sector survey complete");return}
+      mission.step=(mission.remaining||0)+" VIEWPOINT"+(mission.remaining===1?"":"S")+" REMAIN";
+      startFrontierTravel("survey sector");return;
+    }
+
+    abortMission("unknown objective");
+  }
+
+  function decideNextStep(){
+    if(roverState.mission)continueMission();
+    else chooseMission();
   }
 
   function startNavigation(goal,purpose,zone,speed){
@@ -436,7 +561,13 @@ async function boot(){
       if(roverState.navPurpose==="explore")startScan(roverState.targetZone);
       else if(roverState.navPurpose==="activate")startGateActivation();
       else if(roverState.navPurpose==="enter")startTransit();
-      else if(roverState.navPurpose==="frontier"){markVisitedCell();log("viewpoint reached");saveLife();think();}
+      else if(roverState.navPurpose==="frontier"){
+        markVisitedCell();
+        if(roverState.mission&&roverState.mission.type==="survey"){
+          roverState.mission.remaining=Math.max(0,(roverState.mission.remaining||1)-1);
+        }
+        log("mission viewpoint reached");saveLife();think();
+      }
       else think();
     }
   }
@@ -512,7 +643,9 @@ async function boot(){
     const up=roverState.upgradeChoice;if(!up||life.parts<up.cost){think();return}
     life.parts-=up.cost;life.upgrades.push(up.id);roverState.battery=Math.min(maxBattery(),roverState.battery+(up.id==="battery"?35:0));
     life.personality.improve=clamp(life.personality.improve-.008,.25,.98);
-    applyUpgradeVisuals();log("upgrade installed · "+up.label.toLowerCase());saveLife();think();
+    applyUpgradeVisuals();log("upgrade installed · "+up.label.toLowerCase());saveLife();
+    if(roverState.mission&&roverState.mission.type==="upgrade"&&roverState.mission.upgradeId===up.id){finishMission("upgrade installed");}
+    else think();
   }
 
   function startGateActivation(){
@@ -525,7 +658,8 @@ async function boot(){
   function startTransit(){roverState.state="TRANSIT";roverState.timer=2.0;roverState.speed=.28;log("crossing threshold by own decision")}
   function advanceMap(){
     life.mapIndex++;life.personality.curiosity=clamp(life.personality.curiosity+.01,.25,.98);life.personality.caution=clamp(life.personality.caution-.006,.22,.95);
-    life.position=null;roverState.x=0;roverState.z=0;roverState.heading=rnd(-Math.PI,Math.PI);roverState.speed=0;roverState.targetZone=null;
+    life.position=null;life.currentMission=null;roverState.mission=null;
+    roverState.x=0;roverState.z=0;roverState.heading=rnd(-Math.PI,Math.PI);roverState.speed=0;roverState.targetZone=null;
     buildWorld();roverState.battery=Math.min(maxBattery(),roverState.battery+12);applyUpgradeVisuals();log("new world · "+activeConfig.name.toLowerCase());saveLife();think();
   }
 
@@ -536,7 +670,7 @@ async function boot(){
   }
 
   function updateBehavior(dt,time){
-    if(roverState.state==="THINK"){roverState.timer-=dt;if(roverState.timer<=0)chooseAction()}
+    if(roverState.state==="THINK"){roverState.timer-=dt;if(roverState.timer<=0)decideNextStep()}
     else if(roverState.state==="NAV"){updateNavigation(dt);if(roverState.navPurpose==="frontier")roverState.movingScanPhase+=dt;}
     else if(roverState.state==="SCAN"){
       const canSee=roverState.targetZone&&visibleToCamera(roverState.targetZone);
@@ -782,7 +916,12 @@ async function boot(){
           decisionBadge.textContent="SEEN · "+obj.zone.id;
           saveLife();
           if(roverState.state==="NAV"&&roverState.navPurpose==="frontier"){
-            roverState.speed=0;think();
+            roverState.speed=0;
+            const cm=roverState.mission;
+            if(cm&&cm.type==="survey"&&obj.zone){
+              setMission({type:"investigate",targetId:obj.zone.id,label:"INVESTIGATE "+obj.zone.id},"survey anomaly found");
+            }
+            think();
           }
         }
       }
@@ -825,8 +964,8 @@ async function boot(){
         roverState.navPurpose==="explore"?"見つけた対象へ移動中。":
         roverState.navPurpose==="activate"?"ゲートへ戻っています。":
         roverState.navPurpose==="enter"?"次の世界へ向かっています。":
-        roverState.navPurpose==="frontier"?"未踏の観測地点へ移動しながら探索中。":"自由移動中。",
-        roverState.navPurpose==="frontier"?"走行中も足元と遠方を交互にカメラ走査しています。":(z?"目標まで "+d.toFixed(1)+" m。":"経路を調整しています。")
+        roverState.navPurpose==="frontier"?"MISSIONのため次の観測地点へ移動中。":"自由移動中。",
+        roverState.navPurpose==="frontier"?"目的達成に必要な対象を探しながら走行しています。":(z?"目標まで "+d.toFixed(1)+" m。":"経路を調整しています。")
       ];
       case"SCAN":return["現地を詳しく調べています。","見つけた物が何なのか判別しています。"];
       case"PICKUP":return["見つけた物を回収しています。","将来何に使えるかは、まだ決めていません。"];
@@ -844,6 +983,21 @@ async function boot(){
   function updateUI(){
     const [a,b]=activityCopy(),m=mem(),pct=Math.round(exploration()*100);
     stateText.textContent=roverState.state;activityText.textContent=a;detailText.textContent=b;
+    const mission=roverState.mission;
+    missionText.textContent=mission?mission.label:"NO MISSION";
+    if(!mission)missionStepText.textContent="次の目的を選んでいます。";
+    else if(mission.type==="upgrade"){
+      const d=UPGRADE_DEFS[mission.upgradeId];
+      missionStepText.textContent=life.parts>=(d?.cost||99)?"必要部品が揃いました。自己改造へ移ります。":"部品 "+life.parts+"/"+(d?.cost||"?")+"。不足分を探しています。";
+    }else if(mission.type==="openGate"){
+      missionStepText.textContent=mission.step||(m.gateKnown?(m.coreHeld?"ゲートへキーアイテムを運びます。":"対応するアイテムを探します。"):"ゲート構造を探します。");
+    }else if(mission.type==="survey"){
+      missionStepText.textContent=(mission.remaining||0)+" 個の未踏観測地点を確認したら完了します。";
+    }else if(mission.type==="investigate"){
+      missionStepText.textContent=(mission.targetId||"対象")+" の正体を確認します。";
+    }else if(mission.type==="crossGate"){
+      missionStepText.textContent="起動済みゲートへ移動し、次の環境へ進みます。";
+    }else missionStepText.textContent=mission.step||"目的達成へ向けて行動中です。";
     batteryText.textContent="BATTERY "+Math.round(roverState.battery/maxBattery()*100)+"%";speedText.textContent="SPEED "+Math.abs(roverState.speed).toFixed(2)+" m/s";
     partsText.textContent="PARTS "+life.parts;sampleText.textContent="SAMPLES "+life.samples;exploreText.textContent="EXPLORED "+pct+"%";
     headingText.textContent="H "+Math.round((roverState.heading*180/Math.PI+360)%360)+"° · P "+Math.round(THREE.MathUtils.radToDeg(roverState.mastYaw))+"° · T "+Math.round(THREE.MathUtils.radToDeg(roverState.mastPitch))+"°";updateMapUI();
