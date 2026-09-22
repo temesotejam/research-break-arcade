@@ -1,7 +1,7 @@
 (() => {
 "use strict";
 const THREE_URL="https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js";
-const SAVE_KEY="rba-tiny-rover-life-v3";
+const SAVE_KEY="rba-tiny-bot-minecraft-v1";
 
 async function boot(){
   const $=id=>document.getElementById(id);
@@ -31,36 +31,42 @@ async function boot(){
 
   const MAP_TEMPLATES=[
     {
-      name:"RED BASIN",theme:{bg:0xa36443,fog:0x986047,ground:0x8b5134,rock:0x624236},rough:.38,seed:1.7,core:"RESONANCE CORE",
+      name:"OVERWORLD PLAINS",dimension:"OVERWORLD",biome:"overworld",
+      theme:{bg:0x8cc8f2,fog:0xb7d9ee,ground:0x6da94a,dirt:0x765131,rock:0x737373,fogDensity:.012},
+      rough:.20,seed:1.7,core:"FLINT & STEEL",gateName:"NETHER PORTAL",
       zones:[
-        {id:"F-01",x:-5.4,z:-3.6,kind:"geology",interest:.72,label:"angular fragment"},
-        {id:"F-02",x:4.8,z:-4.1,kind:"parts",parts:2,label:"sealed actuator"},
-        {id:"F-03",x:5.7,z:2.3,kind:"geology",interest:.46,label:"dark cobble"},
-        {id:"F-04",x:-4.6,z:4.4,kind:"core",label:"resonance core"},
-        {id:"F-05",x:6.4,z:5.0,kind:"gate",label:"dormant frame"},
-        {id:"F-06",x:.8,z:5.7,kind:"parts",parts:1,label:"power coupler"}
+        {id:"M-01",x:-5.4,z:-3.6,kind:"geology",interest:.72,label:"stone cluster",blockType:"STONE"},
+        {id:"M-02",x:4.8,z:-4.1,kind:"parts",parts:2,resource:"IRON",label:"iron ore cluster"},
+        {id:"M-03",x:5.7,z:2.3,kind:"geology",interest:.46,label:"coal outcrop",blockType:"COAL ORE"},
+        {id:"M-04",x:-4.6,z:4.4,kind:"core",label:"portal igniter",item:"FLINT & STEEL"},
+        {id:"M-05",x:6.4,z:5.0,kind:"gate",label:"ruined obsidian portal",portal:"NETHER PORTAL"},
+        {id:"M-06",x:.8,z:5.7,kind:"parts",parts:1,resource:"REDSTONE",label:"redstone ore"}
       ]
     },
     {
-      name:"GLASS HOLLOW",theme:{bg:0x384654,fog:0x354954,ground:0x3d4d52,rock:0x53636a},rough:.62,seed:4.2,core:"PRISM KEY",
+      name:"NETHER WASTES",dimension:"NETHER",biome:"nether",
+      theme:{bg:0x3b1518,fog:0x4c1c1a,ground:0x7c302b,dirt:0x5f2422,rock:0x342c2c,fogDensity:.020},
+      rough:.30,seed:4.2,core:"ENDER EYE",gateName:"END PORTAL",
       zones:[
-        {id:"H-01",x:-5.8,z:-2.2,kind:"geology",interest:.81,label:"glassy ridge"},
-        {id:"H-02",x:3.9,z:-5.1,kind:"parts",parts:2,label:"sensor block"},
-        {id:"H-03",x:6.0,z:.8,kind:"core",label:"prism key"},
-        {id:"H-04",x:-3.7,z:4.7,kind:"geology",interest:.91,label:"veined monolith"},
-        {id:"H-05",x:5.7,z:5.4,kind:"gate",label:"dark aperture"},
-        {id:"H-06",x:-.6,z:5.8,kind:"parts",parts:2,label:"spring assembly"}
+        {id:"N-01",x:-5.8,z:-2.2,kind:"geology",interest:.81,label:"basalt formation",blockType:"BASALT"},
+        {id:"N-02",x:3.9,z:-5.1,kind:"parts",parts:2,resource:"QUARTZ",label:"nether quartz ore"},
+        {id:"N-03",x:6.0,z:.8,kind:"core",label:"ender eye cache",item:"ENDER EYE"},
+        {id:"N-04",x:-3.7,z:4.7,kind:"geology",interest:.91,label:"blackstone ridge",blockType:"BLACKSTONE"},
+        {id:"N-05",x:5.7,z:5.4,kind:"gate",label:"ancient end portal",portal:"END PORTAL"},
+        {id:"N-06",x:-.6,z:5.8,kind:"parts",parts:2,resource:"GOLD",label:"nether gold ore"}
       ]
     },
     {
-      name:"ANCIENT RELAY",theme:{bg:0x7a6a58,fog:0x6d645b,ground:0x6d5d4e,rock:0x504a43},rough:.48,seed:7.1,core:"SIGNAL SEED",
+      name:"THE END",dimension:"END",biome:"end",
+      theme:{bg:0x181522,fog:0x24202c,ground:0xd8d2a0,dirt:0xb9b384,rock:0x25202a,fogDensity:.014},
+      rough:.18,seed:7.1,core:"GATEWAY CRYSTAL",gateName:"END GATEWAY",
       zones:[
-        {id:"A-01",x:-5.1,z:-4.8,kind:"parts",parts:2,label:"old battery cell"},
-        {id:"A-02",x:4.6,z:-4.6,kind:"geology",interest:.69,label:"machined stone"},
-        {id:"A-03",x:5.9,z:1.9,kind:"core",label:"signal seed"},
-        {id:"A-04",x:-4.8,z:3.8,kind:"parts",parts:2,label:"optical head"},
-        {id:"A-05",x:6.2,z:5.2,kind:"gate",label:"relay gate"},
-        {id:"A-06",x:.2,z:5.7,kind:"geology",interest:.88,label:"buried plate"}
+        {id:"E-01",x:-5.1,z:-4.8,kind:"parts",parts:2,resource:"PURPUR",label:"purpur fragment"},
+        {id:"E-02",x:4.6,z:-4.6,kind:"geology",interest:.69,label:"end stone rise",blockType:"END STONE"},
+        {id:"E-03",x:5.9,z:1.9,kind:"core",label:"gateway crystal",item:"GATEWAY CRYSTAL"},
+        {id:"E-04",x:-4.8,z:3.8,kind:"parts",parts:2,resource:"AMETHYST",label:"crystal block cache"},
+        {id:"E-05",x:6.2,z:5.2,kind:"gate",label:"end gateway frame",portal:"END GATEWAY"},
+        {id:"E-06",x:.2,z:5.7,kind:"geology",interest:.88,label:"obsidian spire",blockType:"OBSIDIAN"}
       ]
     }
   ];
@@ -71,9 +77,9 @@ async function boot(){
     const c=structuredClone(base);
     if(index>=MAP_TEMPLATES.length){
       const cycle=Math.floor(index/MAP_TEMPLATES.length);
-      c.name="FRONTIER "+String(index+1).padStart(2,"0");
+      c.name=(c.dimension||"OVERWORLD")+" CHUNK "+String(index+1).padStart(2,"0");
       c.seed+=cycle*2.73;c.rough=clamp(c.rough+cycle*.025,.35,.78);
-      c.core="FRONTIER CORE "+String(index+1).padStart(2,"0");
+      c.core="PORTAL KEY "+String(index+1).padStart(2,"0");
       c.zones.forEach((z,i)=>{
         z.id="X"+(index+1)+"-"+(i+1);
         z.x+=Math.sin(index*1.4+i)*.45;z.z+=Math.cos(index*.9+i)*.4;
@@ -86,7 +92,7 @@ async function boot(){
 
   function freshLife(){
     return{
-      version:3,mapIndex:0,parts:0,samples:0,battery:100,upgrades:[],
+      version:4,mapIndex:0,parts:0,samples:0,battery:100,upgrades:[],
       personality:{curiosity:rnd(.48,.90),caution:rnd(.36,.80),improve:rnd(.45,.92)},
       exp:{stucks:0,charges:0,distance:0,scans:0,gates:0,contacts:0},
       maps:{},position:null,lastSeen:Date.now()
@@ -95,7 +101,7 @@ async function boot(){
   function loadLife(){
     try{
       const raw=localStorage.getItem(SAVE_KEY);if(!raw)return freshLife();
-      const v=JSON.parse(raw);if(!v||v.version!==3)return freshLife();
+      const v=JSON.parse(raw);if(!v||v.version!==4)return freshLife();
       return v;
     }catch(_){return freshLife()}
   }
@@ -126,7 +132,7 @@ async function boot(){
   const hemi=new THREE.HemisphereLight(0xffd4ae,0x302621,1.45);scene.add(hemi);
   const sun=new THREE.DirectionalLight(0xffd9a0,2.5);sun.position.set(-8,11,4);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);
   sun.shadow.camera.left=-12;sun.shadow.camera.right=12;sun.shadow.camera.top=12;sun.shadow.camera.bottom=-12;scene.add(sun);scene.add(sun.target);
-  const lightPresets=[{name:"LOW SUN",mul:1,bg:.0},{name:"HIGH SUN",mul:.88,bg:.08},{name:"DUSTY",mul:.52,bg:-.06}];
+  const lightPresets=[{name:"DAY",mul:1,bg:.02},{name:"SUNSET",mul:.78,bg:-.03},{name:"NIGHT",mul:.36,bg:-.15}];
   let lightIndex=0;
 
   let activeConfig=configFor(life.mapIndex),worldGroup=null,zones=[],obstacles=[],gateVisual=null,terrainSeed=activeConfig.seed;
@@ -249,12 +255,12 @@ async function boot(){
   const drillTip=new THREE.Mesh(new THREE.ConeGeometry(.065,.18,12),new THREE.MeshStandardMaterial({color:0x777b78,metalness:.6,roughness:.3}));drillTip.rotation.z=-Math.PI/2;drillTip.position.x=.20;wrist.add(drillTip);
 
   const UPGRADE_DEFS={
-    traction:{label:"TRACTION WHEELS",cost:2},
-    battery:{label:"AUX BATTERY",cost:3},
-    lidar:{label:"LIDAR",cost:2},
-    suspension:{label:"ACTIVE SUSPENSION",cost:3},
-    arm:{label:"ARM TOOL",cost:3},
-    solar:{label:"SOLAR BOOST",cost:2}
+    traction:{label:"IRON TREADS",cost:2},
+    battery:{label:"REDSTONE CELL",cost:3},
+    lidar:{label:"AMETHYST SCANNER",cost:2},
+    suspension:{label:"SLIME SUSPENSION",cost:3},
+    arm:{label:"DIAMOND TOOL",cost:3},
+    solar:{label:"DAYLIGHT ARRAY",cost:2}
   };
   const has=u=>life.upgrades.includes(u);
   function maxBattery(){return has("battery")?150:100}
@@ -404,7 +410,7 @@ async function boot(){
     const up=desiredUpgradeCandidate();
 
     if(!up){
-      setMission({type:"advance",label:"REACH NEXT WORLD"},"no remaining upgrade candidate");
+      setMission({type:"advance",label:"REACH NEXT DIMENSION"},"no remaining upgrade candidate");
       continueMission();return;
     }
 
@@ -414,7 +420,7 @@ async function boot(){
     const advanceScore=44+p.curiosity*30+gateProgress*34+(life.upgrades.length>=2?8:0)+Math.random()*6;
 
     if(advanceScore>evolveScore){
-      setMission({type:"advance",label:"REACH NEXT WORLD"},"next environment has become the stronger objective");
+      setMission({type:"advance",label:"REACH NEXT DIMENSION"},"next environment has become the stronger objective");
     }else{
       setMission({type:"evolve",upgradeId:up.id,label:"SELF EVOLUTION · "+up.label},"capability improvement is the stronger objective");
     }
@@ -952,24 +958,24 @@ async function boot(){
       case"THINK":return["次に何をするか考えています。","カメラで実際に見た記憶だけを使って候補を比較しています。"];
       case"NAV":return[
         roverState.navPurpose==="explore"?"見つけた対象へ移動中。":
-        roverState.navPurpose==="activate"?"ゲートへ戻っています。":
+        roverState.navPurpose==="activate"?"ポータルへ戻っています。":
         roverState.navPurpose==="enter"?"次の世界へ向かっています。":
         roverState.navPurpose==="frontier"?"最大目標を進めるため探索移動中。":"自由移動中。",
-        roverState.navPurpose==="frontier"?"改造材料または次の場所への手掛かりを探しながら走行しています。":(z?"目標まで "+d.toFixed(1)+" m。":"経路を調整しています。")
+        roverState.navPurpose==="frontier"?"改造材料または次のディメンションへの手掛かりを探しながら走行しています。":(z?"目標まで "+d.toFixed(1)+" m。":"経路を調整しています。")
       ];
       case"SCAN":return["現地を詳しく調べています。","見つけた物が何なのか判別しています。"];
       case"PICKUP":return["見つけた物を回収しています。","将来何に使えるかは、まだ決めていません。"];
       case"CONTACT":return["対象へ接触調査しています。","アームで表面を測定しています。"];
       case"UPGRADE":return["自分自身を改造しています。",roverState.upgradeChoice?roverState.upgradeChoice.label+" を取り付けています。":"部品を組み替えています。"];
-      case"ACTIVATE_GATE":return["未知のアイテムをゲートへ接続中。","以前見つけた構造物との関係を試しています。"];
+      case"ACTIVATE_GATE":return["未知のアイテムをポータルへ接続中。","以前見つけた構造物との関係を試しています。"];
       case"CHARGE":return["充電のため停止しています。","危険を取らず、行動可能時間を回復しています。"];
       case"RECOVER":return["経路から自力で脱出中。","後退して別の進入角を作っています。"];
-      case"TRANSIT":return["ゲートを通過しています。","戻るかどうかは分からないまま次の環境へ進みます。"];
+      case"TRANSIT":return["ポータルを通過しています。","戻るかどうかは分からないまま次のディメンションへ進みます。"];
       default:return["自律動作中。",""];
     }
   }
 
-  function updateMapUI(){mapText.textContent="MAP "+String(life.mapIndex+1).padStart(2,"0")+" · "+activeConfig.name}
+  function updateMapUI(){mapText.textContent="DIMENSION "+String(life.mapIndex+1).padStart(2,"0")+" · "+activeConfig.name}
   function updateUI(){
     const [a,b]=activityCopy(),m=mem(),pct=Math.round(exploration()*100);
     stateText.textContent=roverState.state;activityText.textContent=a;detailText.textContent=b;
@@ -982,17 +988,17 @@ async function boot(){
       if(need===0)missionStepText.textContent=(mission.step||"必要部品が揃いました。自己改造へ進みます。");
       else missionStepText.textContent=(mission.step||("改造に必要な部品をあと "+need+" 個探します。"));
     }else if(mission.type==="advance"){
-      if(m.gateActivated)missionStepText.textContent="ゲートは起動済みです。次の場所へ進みます。";
-      else missionStepText.textContent=mission.step||(m.gateKnown?(m.coreHeld?"キーアイテムをゲートへ運びます。":"ゲートを起動できるアイテムを探します。"):"次の場所へ進む入口とキーアイテムを探します。");
+      if(m.gateActivated)missionStepText.textContent="ポータルは起動済みです。次のディメンションへ進みます。";
+      else missionStepText.textContent=mission.step||(m.gateKnown?(m.coreHeld?"キーアイテムをポータルへ運びます。":"ポータルを起動できるアイテムを探します。"):"次のディメンションへ進む入口とキーアイテムを探します。");
     }else missionStepText.textContent="最大目標を再計画しています。";
     batteryText.textContent="BATTERY "+Math.round(roverState.battery/maxBattery()*100)+"%";speedText.textContent="SPEED "+Math.abs(roverState.speed).toFixed(2)+" m/s";
-    partsText.textContent="PARTS "+life.parts;sampleText.textContent="SAMPLES "+life.samples;exploreText.textContent="EXPLORED "+pct+"%";
+    partsText.textContent="MATERIALS "+life.parts;sampleText.textContent="ANALYSES "+life.samples;exploreText.textContent="EXPLORED "+pct+"%";
     headingText.textContent="H "+Math.round((roverState.heading*180/Math.PI+360)%360)+"° · P "+Math.round(THREE.MathUtils.radToDeg(roverState.mastYaw))+"° · T "+Math.round(THREE.MathUtils.radToDeg(roverState.mastPitch))+"°";updateMapUI();
     const P=life.personality;
     curiosityFill.style.width=Math.round(P.curiosity*100)+"%";cautionFill.style.width=Math.round(P.caution*100)+"%";improveFill.style.width=Math.round(P.improve*100)+"%";
     curiosityText.textContent=Math.round(P.curiosity*100);cautionText.textContent=Math.round(P.caution*100);improveText.textContent=Math.round(P.improve*100);
     upgradeList.innerHTML=life.upgrades.length?life.upgrades.map(u=>'<span class="upgrade-chip">'+UPGRADE_DEFS[u].label+'</span>').join(""):'<span class="empty-chip">stock configuration</span>';
-    const inv=[];if(m.coreHeld)inv.push(activeConfig.core);if(m.gateKnown)inv.push(m.gateActivated?"GATE: ONLINE":"GATE: REMEMBERED");if(life.parts)inv.push("SPARE PARTS ×"+life.parts);
+    const inv=[];if(m.coreHeld)inv.push(activeConfig.core);if(m.gateKnown)inv.push(m.gateActivated?"GATE: ONLINE":"GATE: REMEMBERED");if(life.parts)inv.push("MATERIAL UNITS ×"+life.parts);
     inventoryList.innerHTML=inv.length?inv.map(x=>'<span class="item-chip">'+x+'</span>').join(""):'<span class="empty-chip">nothing unusual yet</span>';
   }
 
