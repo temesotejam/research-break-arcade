@@ -27,6 +27,20 @@
 
 公開ページ: `fishing.html`
 
+## Game 03 — Stack Tower
+
+左右に動くブロックをタイミングよく積み上げる1ボタンゲームです。
+
+- PC: `Space`
+- Mobile: 画面下の DROP またはゲーム画面タップ
+- ズレた部分は切り落とされ、塔が徐々に細くなる
+- ±4 px以内は PERFECT。コンボが続くほど少し幅を回復
+- 高くなるほどブロック速度が上昇
+- 最大90秒
+- ベスト高さはブラウザの Local Storage に保存
+
+公開ページ: `tower.html`
+
 ## Run locally
 
 `index.html` をブラウザで開くだけでも動作します。ローカルHTTPサーバーを使う場合は任意の静的サーバーでこのディレクトリを配信してください。
@@ -49,3 +63,6 @@
 - `fishing.html` — Night Fishing UI
 - `fishing.css` — Night Fishing デザイン
 - `fishing.js` — Night Fishing ゲームロジック / Canvas描画
+- `tower.html` — Stack Tower UI
+- `tower.css` — Stack Tower デザイン
+- `tower.js` — Stack Tower ゲームロジック / Canvas描画
