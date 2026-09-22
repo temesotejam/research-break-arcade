@@ -137,10 +137,11 @@ async function boot(){
 
   let activeConfig=configFor(life.mapIndex),worldGroup=null,zones=[],obstacles=[],gateVisual=null,terrainSeed=activeConfig.seed;
   let visualObjects=[],occlusionMeshes=[],detectionCache=[],detectionByZoneId=new Map(),attentionDetection=null;
-  const WORLD=64;
+  const WORLD=64,VOXEL=1.0,HEIGHT_STEP=.32;
   function heightAt(x,z){
     const r=activeConfig.rough;
-    return r*(.24*Math.sin(x*.48+terrainSeed)+.17*Math.cos(z*.66-terrainSeed*.4)+.10*Math.sin(x*.91+z*.59)+.05*Math.cos(x*1.75-z*.45));
+    const raw=r*(1.05*Math.sin(x*.13+terrainSeed)+.82*Math.cos(z*.12-terrainSeed*.4)+.52*Math.sin(x*.075+z*.085));
+    return Math.round(raw/HEIGHT_STEP)*HEIGHT_STEP;
   }
 
   function disposeGroup(g){
@@ -163,64 +164,172 @@ async function boot(){
     return obj;
   }
 
+  function addVoxel(group,mat,x,y,z,sx=1,sy=1,sz=1){
+    const m=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),mat);
+    m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;group.add(m);return m;
+  }
+
+  function resourceColor(name){
+    return {
+      IRON:0xb9b9b4,REDSTONE:0xb92727,QUARTZ:0xe9e1d6,GOLD:0xe3b93d,
+      PURPUR:0x9b6bab,AMETHYST:0x9f73d6
+    }[name]||0x9aa0a0;
+  }
+
+  function blockMaterial(hex,emissive=0){
+    return new THREE.MeshStandardMaterial({color:hex,roughness:.92,metalness:.03,emissive,emissiveIntensity:emissive?0.28:0});
+  }
+
+  function makeTree(x,z,id){
+    const g=new THREE.Group();
+    const trunkMat=blockMaterial(0x795438),leafMat=blockMaterial(0x3f7d38);
+    addVoxel(g,trunkMat,0,.65,0,.48,1.3,.48);
+    addVoxel(g,leafMat,0,1.55,0,1.35,.80,1.35);
+    addVoxel(g,leafMat,.42,1.35,.05,.75,.65,.80);
+    addVoxel(g,leafMat,-.38,1.38,-.15,.72,.62,.76);
+    g.position.set(x,heightAt(x,z),z);worldGroup.add(g);
+    registerVisual(g,{id,kind:"tree",className:"TREE",classThreshold:.52,label:"oak tree",zone:null,ambient:true});
+    obstacles.push({x,z,rad:.58,zoneId:id});
+  }
+
+  function makeNetherPillar(x,z,id){
+    const g=new THREE.Group(),basalt=blockMaterial(0x373238),magma=blockMaterial(0x8f3d20,0x4c1605);
+    const h=1.25+((id.charCodeAt(id.length-1)||1)%4)*.28;
+    addVoxel(g,basalt,0,h*.5,0,.62,h,.62);
+    if(id.charCodeAt(id.length-1)%3===0)addVoxel(g,magma,.32,.18,.10,.28,.28,.28);
+    g.position.set(x,heightAt(x,z),z);worldGroup.add(g);
+    registerVisual(g,{id,kind:"basalt",className:"BASALT",classThreshold:.56,label:"basalt pillar",zone:null,ambient:true});
+    obstacles.push({x,z,rad:.48,zoneId:id});
+  }
+
+  function makeChorus(x,z,id){
+    const g=new THREE.Group(),stem=blockMaterial(0x6e536f),tip=blockMaterial(0x9b78a3);
+    const h=1.15+((id.charCodeAt(id.length-1)||1)%3)*.32;
+    addVoxel(g,stem,0,h*.5,0,.30,h,.30);
+    addVoxel(g,tip,0,h+.22,0,.55,.42,.55);
+    addVoxel(g,tip,.32,h-.05,.12,.35,.35,.35);
+    g.position.set(x,heightAt(x,z),z);worldGroup.add(g);
+    registerVisual(g,{id,kind:"chorus",className:"CHORUS",classThreshold:.58,label:"chorus plant",zone:null,ambient:true});
+    obstacles.push({x,z,rad:.38,zoneId:id});
+  }
+
+  function makeStoneFormation(def){
+    const g=new THREE.Group();
+    const hex=def.blockType==="COAL ORE"?0x4a4a48:def.blockType==="BASALT"?0x363238:def.blockType==="BLACKSTONE"?0x2f2b30:def.blockType==="END STONE"?0xd9d3a1:def.blockType==="OBSIDIAN"?0x282033:activeConfig.theme.rock;
+    const mat=blockMaterial(hex);
+    const count=def.blockType==="OBSIDIAN"?6:4;
+    for(let j=0;j<count;j++){
+      const bx=(j%2)*.62-.31,bz=Math.floor(j/2)*.58-.35,by=.30+(j===3?.28:0);
+      addVoxel(g,mat,bx,by,bz,.58,.58,.58);
+    }
+    return g;
+  }
+
+  function makeOreCluster(def){
+    const g=new THREE.Group(),stone=blockMaterial(activeConfig.biome==="nether"?0x6c2b28:(activeConfig.biome==="end"?0xd4cea0:0x737373));
+    const ore=blockMaterial(resourceColor(def.resource),def.resource==="REDSTONE"?0x581010:0);
+    for(let j=0;j<3;j++){
+      const b=addVoxel(g,stone,(j-1)*.48,.27,(j%2)*.28-.14,.50,.50,.50);
+      const chip=addVoxel(g,ore,(j-1)*.48+.16,.29,(j%2)*.28-.14,.16,.18,.18);
+      chip.rotation.y=j*.7;
+    }
+    return g;
+  }
+
+  function makeKeyCache(def){
+    const g=new THREE.Group(),chest=blockMaterial(0x8a5b2f),trim=blockMaterial(0x3f2c1d),metal=blockMaterial(0xb4b4ac);
+    addVoxel(g,chest,0,.22,0,.62,.36,.48);
+    addVoxel(g,trim,0,.44,0,.64,.13,.50);
+    addVoxel(g,metal,.32,.30,0,.06,.12,.12);
+    return g;
+  }
+
+  function makePortal(def){
+    const g=new THREE.Group(),obsidian=blockMaterial(0x241c31),accent=blockMaterial(0x4a315b);
+    const bw=.46;
+    for(let y=0;y<5;y++){
+      addVoxel(g,obsidian,0,.23+y*bw,-.92,bw,bw,bw);
+      addVoxel(g,obsidian,0,.23+y*bw,.92,bw,bw,bw);
+    }
+    for(let z=-.92;z<=.92+.01;z+=bw)addVoxel(g,obsidian,0,.23+4*bw,z,bw,bw,bw);
+    addVoxel(g,accent,0,.23,0,.40,.40,1.35);
+    const portalMat=new THREE.MeshBasicMaterial({color:activeConfig.biome==="nether"?0x9b4de0:0x6c4fc8,transparent:true,opacity:.48,side:THREE.DoubleSide,depthWrite:false});
+    const portal=new THREE.Mesh(new THREE.PlaneGeometry(1.35,1.62),portalMat);
+    portal.position.set(.02,1.14,0);portal.rotation.y=Math.PI/2;portal.visible=mem().gateActivated;g.add(portal);
+    gateVisual={group:g,portal,mat:portalMat};
+    return g;
+  }
+
   function buildWorld(){
     if(worldGroup)disposeGroup(worldGroup);
     activeConfig=configFor(life.mapIndex);terrainSeed=activeConfig.seed;worldGroup=new THREE.Group();scene.add(worldGroup);zones=[];obstacles=[];gateVisual=null;
     visualObjects=[];occlusionMeshes=[];detectionCache=[];detectionByZoneId=new Map();attentionDetection=null;
-    scene.background=new THREE.Color(activeConfig.theme.bg);scene.fog.color.setHex(activeConfig.theme.fog);
+    scene.background=new THREE.Color(activeConfig.theme.bg);scene.fog.color.setHex(activeConfig.theme.fog);scene.fog.density=activeConfig.theme.fogDensity;
 
-    const g=new THREE.PlaneGeometry(WORLD,WORLD,128,128);g.rotateX(-Math.PI/2);const a=g.attributes.position;
-    for(let i=0;i<a.count;i++)a.setY(i,heightAt(a.getX(i),a.getZ(i)));a.needsUpdate=true;g.computeVertexNormals();
-    const ground=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:activeConfig.theme.ground,roughness:.98}));ground.receiveShadow=true;worldGroup.add(ground);
-    ground.userData.isTerrain=true;registerOccluder(ground,null);
+    // Minecraft-like voxel columns: colored top layer over a darker sub-layer.
+    const cells=Math.floor(WORLD/VOXEL);
+    const topGeo=new THREE.BoxGeometry(.98,.09,.98),soilGeo=new THREE.BoxGeometry(.96,1,.96);
+    const topMat=blockMaterial(activeConfig.theme.ground),soilMat=blockMaterial(activeConfig.theme.dirt);
+    const tops=new THREE.InstancedMesh(topGeo,topMat,cells*cells),soils=new THREE.InstancedMesh(soilGeo,soilMat,cells*cells);
+    const dummy=new THREE.Object3D();let n=0;
+    const baseY=-1.35;
+    for(let ix=0;ix<cells;ix++)for(let iz=0;iz<cells;iz++){
+      const x=-WORLD*.5+.5+ix,z=-WORLD*.5+.5+iz,top=heightAt(x,z);
+      dummy.position.set(x,top-.045,z);dummy.scale.set(1,1,1);dummy.updateMatrix();tops.setMatrixAt(n,dummy.matrix);
+      const colH=Math.max(.08,top-baseY);
+      dummy.position.set(x,baseY+colH*.5,z);dummy.scale.set(1,colH,1);dummy.updateMatrix();soils.setMatrixAt(n,dummy.matrix);
+      n++;
+    }
+    tops.receiveShadow=true;soils.receiveShadow=true;worldGroup.add(soils,tops);
+    tops.userData.isTerrain=true;soils.userData.isTerrain=true;registerOccluder(tops,null);registerOccluder(soils,null);
 
-    const pebMat=new THREE.MeshStandardMaterial({color:activeConfig.theme.rock,roughness:1});
-    for(let i=0;i<150;i++){
-      const rr=.04+.08*((i*17+life.mapIndex*11)%11)/11;
-      const m=new THREE.Mesh(new THREE.IcosahedronGeometry(1,1),pebMat);
-      const x=-29+((i*37+life.mapIndex*13)%101)/101*58,z=-29+((i*61+life.mapIndex*19)%103)/103*58;
-      m.position.set(x,heightAt(x,z)+rr*.3,z);m.scale.set(rr*1.7,rr*.58,rr*1.35);m.rotation.set(i*.17,i*.37,i*.09);worldGroup.add(m);
-      if(rr>=.072){
-        registerVisual(m,{id:"P-"+String(i+1).padStart(3,"0"),kind:"ambientRock",label:"surface rock",zone:null,ambient:true});
-      }else{
-        registerOccluder(m,null);
-      }
+    // Biome-specific ambient voxel landmarks.
+    const ambientCount=activeConfig.biome==="overworld"?24:18;
+    for(let i=0;i<ambientCount;i++){
+      const x=-27+((i*37+life.mapIndex*17)%97)/97*54,z=-27+((i*61+life.mapIndex*23)%101)/101*54;
+      if(Math.hypot(x,z)<3.2||activeConfig.zones.some(q=>Math.hypot(q.x-x,q.z-z)<2.4))continue;
+      const id="A-"+life.mapIndex+"-"+String(i+1).padStart(2,"0");
+      if(activeConfig.biome==="overworld")makeTree(x,z,id);
+      else if(activeConfig.biome==="nether")makeNetherPillar(x,z,id);
+      else makeChorus(x,z,id);
+    }
+
+    // Small block boulders for visual texture and object recognition.
+    const stoneMat=blockMaterial(activeConfig.theme.rock);
+    for(let i=0;i<34;i++){
+      const x=-28+((i*29+life.mapIndex*11)%103)/103*56,z=-28+((i*47+life.mapIndex*19)%107)/107*56;
+      if(Math.hypot(x,z)<2.4)continue;
+      const g=new THREE.Group();
+      const size=.24+.10*((i*7)%5)/5;
+      addVoxel(g,stoneMat,0,size*.5,0,size,size,size);
+      g.position.set(x,heightAt(x,z),z);worldGroup.add(g);
+      registerVisual(g,{id:"B-"+String(i+1).padStart(2,"0"),kind:"ambientRock",className:activeConfig.biome==="end"?"END STONE":"STONE",classThreshold:.64,label:"block",zone:null,ambient:true});
     }
 
     const discovered=new Set(mem().discovered);
     activeConfig.zones.forEach((def,i)=>{
       let mesh=null;
       if(def.kind==="geology"){
-        mesh=new THREE.Mesh(new THREE.DodecahedronGeometry(.62+(def.interest||.5)*.22,1),new THREE.MeshStandardMaterial({color:activeConfig.theme.rock,roughness:.9}));
-        mesh.scale.y=.7;obstacles.push({x:def.x,z:def.z,rad:.75,zoneId:def.id});
+        mesh=makeStoneFormation(def);obstacles.push({x:def.x,z:def.z,rad:.82,zoneId:def.id});
       }else if(def.kind==="parts"){
-        mesh=new THREE.Mesh(new THREE.BoxGeometry(.42,.24,.34),new THREE.MeshStandardMaterial({color:0x514b42,roughness:.68,metalness:.25}));
+        mesh=makeOreCluster(def);
       }else if(def.kind==="core"){
-        mesh=new THREE.Mesh(new THREE.OctahedronGeometry(.20,0),new THREE.MeshStandardMaterial({color:0x7a684f,emissive:discovered.has(def.id)?0x57421d:0x000000,emissiveIntensity:1.2,roughness:.35,metalness:.42}));
+        mesh=makeKeyCache(def);
       }else if(def.kind==="gate"){
-        const gate=new THREE.Group();
-        const gm=new THREE.MeshStandardMaterial({color:0x4a433d,roughness:.85,metalness:.15});
-        const l=new THREE.Mesh(new THREE.BoxGeometry(.42,2.25,.32),gm),rr=l.clone(),top=new THREE.Mesh(new THREE.BoxGeometry(.42,.32,2.2),gm);
-        l.position.set(0,1.1,-.92);rr.position.set(0,1.1,.92);top.position.set(0,2.1,0);gate.add(l,rr,top);
-        const portalMat=new THREE.MeshBasicMaterial({color:0x7ad7c9,transparent:true,opacity:.42,side:THREE.DoubleSide,depthWrite:false});
-        const portal=new THREE.Mesh(new THREE.CircleGeometry(.83,48),portalMat);portal.position.y=1.1;portal.rotation.y=Math.PI/2;portal.visible=mem().gateActivated;gate.add(portal);
-        gate.visible=true;
-        gateVisual={group:gate,portal,mat:portalMat};
-        mesh=gate;obstacles.push({x:def.x,z:def.z,rad:1.0,zoneId:def.id});
+        mesh=makePortal(def);obstacles.push({x:def.x,z:def.z,rad:1.08,zoneId:def.id});
       }
       let visual=null;
       if(mesh){
         mesh.position.set(def.x,heightAt(def.x,def.z),def.z);
         if(discovered.has(def.id)&&(def.kind==="parts"||def.kind==="core"))mesh.visible=false;
-        mesh.castShadow=true;mesh.receiveShadow=true;worldGroup.add(mesh);
+        worldGroup.add(mesh);
         visual=registerVisual(mesh,{id:def.id,kind:def.kind,label:def.label,zone:null,ambient:false});
       }
       const zone={...def,mesh,visual,discovered:discovered.has(def.id)};
       if(visual)visual.zone=zone;
       zones.push(zone);
     });
-    setLight(lightIndex);
-    updateMapUI();
+    setLight(lightIndex);updateMapUI();
   }
 
   // Rover model
