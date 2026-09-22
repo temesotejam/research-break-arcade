@@ -1,11 +1,14 @@
 (() => {
 "use strict";
 
-const SAVE_KEY="rba-tiny-bot-canvas-v1";
+const SAVE_KEY="rba-tiny-bot-retro-world-v1";
+const WORLD_SIZE=2048;
+const HALF=WORLD_SIZE/2;
+const VIEW_FOV=Math.PI*120/180;
+const SEARCH_CELL=32;
 
 const $=id=>document.getElementById(id);
-const canvas=$("roverCanvas");
-const ctx=canvas.getContext("2d");
+const canvas=$("roverCanvas"),ctx=canvas.getContext("2d");
 const intro=$("intro"),enterButton=$("enterButton"),pauseButton=$("pauseButton");
 const viewButton=$("viewButton"),lightButton=$("lightButton"),newLifeButton=$("newLifeButton");
 const viewBadge=$("viewBadge"),decisionBadge=$("decisionBadge"),viewName=$("viewName");
@@ -17,133 +20,164 @@ const curiosityFill=$("curiosityFill"),cautionFill=$("cautionFill"),improveFill=
 const curiosityText=$("curiosityText"),cautionText=$("cautionText"),improveText=$("improveText");
 
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-const lerp=(a,b,t)=>a+(b-a)*t;
 const rnd=(a,b)=>a+Math.random()*(b-a);
 const wrap=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a};
 const deg=r=>r*180/Math.PI;
+const dist=(a,b,c,d)=>Math.hypot(a-c,b-d);
 
-const WORLD=64;
-const HALF=WORLD/2;
-const CELL=5;
-const FOV=Math.PI*70/180;
-const LIGHTS=[
-  {name:"DAY",shade:0},
-  {name:"SUNSET",shade:0.17},
-  {name:"NIGHT",shade:0.52}
+const TIMES=[
+  {name:"DAY",overlay:"rgba(0,0,0,0)"},
+  {name:"SUNSET",overlay:"rgba(109,56,23,.18)"},
+  {name:"NIGHT",overlay:"rgba(9,18,52,.48)"}
 ];
 
-const MAPS=[
+const REGION_THEMES=[
   {
-    name:"OVERWORLD PLAINS",biome:"overworld",sky:"#79b9e7",ground:"#6fa34b",soil:"#765132",rock:"#737373",
-    core:"FLINT & STEEL",portal:"NETHER PORTAL",
-    zones:[
-      {id:"M-01",x:-16,z:-11,kind:"geology",label:"stone cluster",className:"STONE",interest:.72},
-      {id:"M-02",x:14,z:-13,kind:"parts",label:"iron ore",className:"IRON ORE",parts:2},
-      {id:"M-03",x:18,z:7,kind:"geology",label:"coal ore",className:"COAL ORE",interest:.46},
-      {id:"M-04",x:-15,z:15,kind:"core",label:"flint and steel cache",className:"FLINT & STEEL"},
-      {id:"M-05",x:21,z:17,kind:"gate",label:"ruined obsidian portal",className:"NETHER PORTAL"},
-      {id:"M-06",x:4,z:19,kind:"parts",label:"redstone ore",className:"REDSTONE ORE",parts:1}
-    ]
+    name:"GREEN KINGDOM",
+    colors:{grass:"#5f9f46",grass2:"#70ad52",forest:"#2d6b38",forest2:"#1f532c",water:"#3d78b8",water2:"#5a94d0",mountain:"#77746f",mountain2:"#a19c94",sand:"#cdb66a",road:"#b69a63"},
+    gate:"ANCIENT STONE GATE",key:"SUN CREST",ruin:"OLD SHRINE"
   },
   {
-    name:"NETHER WASTES",biome:"nether",sky:"#3a1518",ground:"#873630",soil:"#5f2422",rock:"#353035",
-    core:"ENDER EYE",portal:"END PORTAL",
-    zones:[
-      {id:"N-01",x:-18,z:-8,kind:"geology",label:"basalt",className:"BASALT",interest:.80},
-      {id:"N-02",x:13,z:-17,kind:"parts",label:"nether quartz ore",className:"QUARTZ ORE",parts:2},
-      {id:"N-03",x:19,z:3,kind:"core",label:"ender eye cache",className:"ENDER EYE"},
-      {id:"N-04",x:-13,z:16,kind:"geology",label:"blackstone",className:"BLACKSTONE",interest:.90},
-      {id:"N-05",x:20,z:18,kind:"gate",label:"ancient end portal",className:"END PORTAL"},
-      {id:"N-06",x:-3,z:20,kind:"parts",label:"nether gold ore",className:"GOLD ORE",parts:2}
-    ]
+    name:"SUNLAND",
+    colors:{grass:"#98a650",grass2:"#adb65e",forest:"#526f32",forest2:"#3f5826",water:"#3f8fb6",water2:"#65afca",mountain:"#8a7664",mountain2:"#ad9680",sand:"#d5bd6a",road:"#b89c63"},
+    gate:"DESERT ARCH",key:"MOON EMBLEM",ruin:"BURIED TEMPLE"
   },
   {
-    name:"THE END",biome:"end",sky:"#181522",ground:"#d6d09e",soil:"#b8b183",rock:"#2a2430",
-    core:"GATEWAY CRYSTAL",portal:"END GATEWAY",
-    zones:[
-      {id:"E-01",x:-17,z:-16,kind:"parts",label:"purpur cache",className:"PURPUR",parts:2},
-      {id:"E-02",x:15,z:-15,kind:"geology",label:"end stone",className:"END STONE",interest:.68},
-      {id:"E-03",x:18,z:6,kind:"core",label:"gateway crystal",className:"GATEWAY CRYSTAL"},
-      {id:"E-04",x:-15,z:13,kind:"parts",label:"amethyst cache",className:"AMETHYST",parts:2},
-      {id:"E-05",x:20,z:18,kind:"gate",label:"end gateway",className:"END GATEWAY"},
-      {id:"E-06",x:2,z:20,kind:"geology",label:"obsidian spire",className:"OBSIDIAN",interest:.88}
-    ]
+    name:"SNOW MARCH",
+    colors:{grass:"#c5d6d0",grass2:"#d5e4df",forest:"#557568",forest2:"#3e5b50",water:"#6a9fc4",water2:"#91bdd7",mountain:"#8c9296",mountain2:"#b6bcc0",sand:"#d8d1b0",road:"#ada78d"},
+    gate:"ICE SHRINE",key:"FROST SIGIL",ruin:"FROZEN RUINS"
+  },
+  {
+    name:"DARKWOOD",
+    colors:{grass:"#435f3c",grass2:"#506e47",forest:"#1d3d27",forest2:"#15301f",water:"#315e78",water2:"#417b96",mountain:"#595759",mountain2:"#777477",sand:"#8e8256",road:"#79694c"},
+    gate:"FOREST MONOLITH",key:"STAR RELIC",ruin:"LOST SANCTUARY"
   }
 ];
 
 const UPGRADE_DEFS={
   speed:{label:"MOVEMENT MODULE",cost:2,effect:"MOVE ×1.48"},
-  mining:{label:"MINING MODULE",cost:3,effect:"MINE ×1.85"},
+  tool:{label:"TOOL MODULE",cost:3,effect:"RECOVER ×1.85"},
   vision:{label:"LONG-RANGE OPTICS",cost:2,effect:"VISION ×1.65"},
   detection:{label:"DETECTION ARRAY",cost:2,effect:"DETECTION +14%"},
   analysis:{label:"FAST ANALYZER",cost:2,effect:"ANALYZE ×1.75"},
   efficiency:{label:"POWER EFFICIENCY",cost:3,effect:"ENERGY ×0.63"}
 };
 
+function hash2(x,y,seed){
+  let h=(Math.imul(x|0,374761393)+Math.imul(y|0,668265263)+Math.imul(seed|0,69069))|0;
+  h=(h^(h>>>13));h=Math.imul(h,1274126177);h=h^(h>>>16);
+  return (h>>>0)/4294967295;
+}
+function smooth(t){return t*t*(3-2*t)}
+function valueNoise(x,y,scale,seed){
+  const fx=x/scale,fy=y/scale,x0=Math.floor(fx),y0=Math.floor(fy),tx=smooth(fx-x0),ty=smooth(fy-y0);
+  const a=hash2(x0,y0,seed),b=hash2(x0+1,y0,seed),c=hash2(x0,y0+1,seed),d=hash2(x0+1,y0+1,seed);
+  const ab=a+(b-a)*tx,cd=c+(d-c)*tx;
+  return ab+(cd-ab)*ty;
+}
+function regionTheme(index){
+  const t=structuredClone(REGION_THEMES[index%REGION_THEMES.length]);
+  if(index>=REGION_THEMES.length)t.name=t.name+" FRONTIER "+String(index+1).padStart(2,"0");
+  return t;
+}
+
+function tileAt(x,y){
+  const ix=Math.floor(x),iy=Math.floor(y);
+  if(Math.abs(ix)>HALF||Math.abs(iy)>HALF)return"void";
+  if(Math.hypot(ix,iy)<12)return"grass";
+  const seed=life.regionIndex*997+31;
+  const elevation=.55*valueNoise(ix,iy,96,seed)+.30*valueNoise(ix,iy,38,seed+17)+.15*valueNoise(ix,iy,15,seed+43);
+  const moisture=.70*valueNoise(ix,iy,82,seed+101)+.30*valueNoise(ix,iy,24,seed+151);
+  const detail=valueNoise(ix,iy,11,seed+207);
+
+  if(life.regionIndex%4===1){
+    if(elevation<.11)return"water";
+    if(elevation>.84)return"mountain";
+    if(moisture>.72&&detail>.45)return"forest";
+    if(moisture<.63)return"sand";
+    return"grass";
+  }
+  if(life.regionIndex%4===2){
+    if(elevation<.14)return"water";
+    if(elevation>.80)return"mountain";
+    if(moisture>.60)return"forest";
+    return detail>.45?"snow":"grass";
+  }
+  if(life.regionIndex%4===3){
+    if(elevation<.16)return"water";
+    if(elevation>.82)return"mountain";
+    if(moisture>.42)return"forest";
+    return detail>.68?"sand":"grass";
+  }
+  if(elevation<.16)return"water";
+  if(elevation>.82)return"mountain";
+  if(moisture>.63)return"forest";
+  if(moisture<.25&&detail>.55)return"sand";
+  return"grass";
+}
+function passableTile(t){return !["water","mountain","void"].includes(t)}
+function terrainSpeed(t){
+  if(t==="forest")return .72;
+  if(t==="sand")return .84;
+  if(t==="snow")return .82;
+  return 1;
+}
+
 function seeded(seed){
   let s=(seed>>>0)||1;
   return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296};
 }
-
-function mapConfig(index){
-  const base=structuredClone(MAPS[index%MAPS.length]);
-  if(index>=MAPS.length){
-    base.name=base.name+" · CHUNK "+String(index+1).padStart(2,"0");
-    base.zones.forEach((z,i)=>{
-      z.id="X"+(index+1)+"-"+(i+1);
-      z.x=clamp(z.x+Math.sin(index*1.37+i)*3,-25,25);
-      z.z=clamp(z.z+Math.cos(index*.91+i)*3,-25,25);
-    });
+function findPassable(rand,minR,maxR,used){
+  for(let tries=0;tries<1500;tries++){
+    const a=rand()*Math.PI*2,r=minR+rand()*(maxR-minR);
+    const x=Math.round(Math.cos(a)*r),y=Math.round(Math.sin(a)*r);
+    if(!passableTile(tileAt(x,y)))continue;
+    if(used.some(p=>dist(x,y,p.x,p.y)<18))continue;
+    return{x,y};
   }
-  return base;
+  return{x:Math.round(minR),y:0};
+}
+function makeRegionObjects(){
+  const rand=seeded(0x6d2b79f5+life.regionIndex*9187),used=[],out=[];
+  const theme=regionTheme(life.regionIndex);
+
+  for(let i=0;i<28;i++){
+    const p=findPassable(rand,35,430,used);used.push(p);
+    out.push({id:"P-"+life.regionIndex+"-"+i,x:p.x,y:p.y,kind:"parts",label:"lost parts cache",className:"MACHINE PARTS",parts:1+(rand()>.76?1:0),radius:.8});
+  }
+  for(let i=0;i<16;i++){
+    const p=findPassable(rand,45,460,used);used.push(p);
+    out.push({id:"R-"+life.regionIndex+"-"+i,x:p.x,y:p.y,kind:"ruin",label:theme.ruin,className:theme.ruin,interest:.45+rand()*.5,radius:1.2});
+  }
+  const key=findPassable(rand,180,360,used);used.push(key);
+  out.push({id:"KEY-"+life.regionIndex,x:key.x,y:key.y,kind:"core",label:theme.key,className:theme.key,radius:.9});
+
+  const gate=findPassable(rand,430,620,used);used.push(gate);
+  out.push({id:"GATE-"+life.regionIndex,x:gate.x,y:gate.y,kind:"gate",label:theme.gate,className:theme.gate,radius:2.1});
+
+  return out;
 }
 
 function freshLife(){
   return{
-    version:1,mapIndex:0,materials:0,analyses:0,battery:100,upgrades:[],
+    version:1,regionIndex:0,parts:0,discoveries:0,battery:100,upgrades:[],
     personality:{curiosity:rnd(.48,.90),caution:rnd(.36,.80),improve:rnd(.45,.92)},
-    exp:{stucks:0,charges:0,distance:0,scans:0,portals:0},
-    maps:{},position:null,currentMission:null,lastSeen:Date.now()
+    exp:{stucks:0,charges:0,distance:0,scans:0,gates:0},
+    regions:{},position:null,currentMission:null,lastSeen:Date.now()
   };
 }
-
 function loadLife(){
   try{
-    const raw=localStorage.getItem(SAVE_KEY);
-    if(!raw)return freshLife();
-    const v=JSON.parse(raw);
-    if(!v||v.version!==1)return freshLife();
-    return v;
+    const raw=localStorage.getItem(SAVE_KEY);if(!raw)return freshLife();
+    const v=JSON.parse(raw);return v&&v.version===1?v:freshLife();
   }catch(_){return freshLife()}
 }
-
 let life=loadLife();
-let config=mapConfig(life.mapIndex);
-let ambient=[];
-let zones=[];
-let obstacles=[];
-let logs=[];
-let running=false,paused=false,lastTime=performance.now(),saveTimer=0,lightIndex=0;
-let viewMode="world",viewIndex=0;
-const views=["world","follow","botcam"];
-
-const bot={
-  x:0,z:0,heading:.35,speed:0,targetSpeed:0,battery:life.battery||100,
-  state:"THINK",timer:1,target:null,goal:null,navPurpose:null,prevDist:Infinity,stuckTime:0,recoverSign:1,
-  headYaw:0,headPitch:-.08,headTargetYaw:0,headTargetPitch:-.08,scanPhase:0,
-  arm:0,walkPhase:0,upgradeChoice:null,
-  mission:life.currentMission&&life.currentMission.mapIndex===life.mapIndex?structuredClone(life.currentMission):null
-};
-
-if(life.position&&life.position.mapIndex===life.mapIndex){
-  bot.x=life.position.x;bot.z=life.position.z;bot.heading=life.position.heading;
-}
-if(bot.mission&&!["evolve","advance"].includes(bot.mission.type))bot.mission=null;
 
 function mem(){
-  const k=String(life.mapIndex);
-  if(!life.maps[k])life.maps[k]={seen:[],discovered:[],recognized:{},coreHeld:false,portalKnown:false,portalActive:false,visited:[]};
-  const m=life.maps[k];
+  const k=String(life.regionIndex);
+  if(!life.regions[k])life.regions[k]={seen:[],discovered:[],recognized:{},keyHeld:false,gateKnown:false,gateActive:false,visited:[]};
+  const m=life.regions[k];
   if(!Array.isArray(m.seen))m.seen=[];
   if(!Array.isArray(m.discovered))m.discovered=[];
   if(!m.recognized)m.recognized={};
@@ -151,84 +185,91 @@ function mem(){
   return m;
 }
 
+let theme=regionTheme(life.regionIndex);
+let zones=[];
+let logs=[];
+let running=false,paused=false,lastTime=performance.now(),saveTimer=0,timeIndex=0;
+let viewMode="world",viewIndex=0;
+const views=["world","close","sensor"];
+let detections=[];
+
+const bot={
+  x:0,y:0,heading:0,speed:0,targetSpeed:0,battery:life.battery||100,state:"THINK",timer:1,
+  target:null,goal:null,navPurpose:null,prevDist:Infinity,stuckTime:0,recoverSign:1,
+  arm:0,walkPhase:0,upgradeChoice:null,
+  mission:life.currentMission&&life.currentMission.regionIndex===life.regionIndex?structuredClone(life.currentMission):null
+};
+if(life.position&&life.position.regionIndex===life.regionIndex){
+  bot.x=life.position.x;bot.y=life.position.y;bot.heading=life.position.heading;
+}
+if(bot.mission&&!["evolve","advance"].includes(bot.mission.type))bot.mission=null;
+
+function buildRegion(){
+  theme=regionTheme(life.regionIndex);
+  const discovered=new Set(mem().discovered);
+  zones=makeRegionObjects().map(z=>({...z,taken:discovered.has(z.id)&&(z.kind==="parts"||z.kind==="core")}));
+  mapText.textContent="REGION "+String(life.regionIndex+1).padStart(2,"0")+" · "+theme.name;
+}
 function saveLife(){
   life.battery=bot.battery;
-  life.position={mapIndex:life.mapIndex,x:bot.x,z:bot.z,heading:bot.heading};
+  life.position={regionIndex:life.regionIndex,x:bot.x,y:bot.y,heading:bot.heading};
   life.currentMission=bot.mission?structuredClone(bot.mission):null;
   life.lastSeen=Date.now();
   try{localStorage.setItem(SAVE_KEY,JSON.stringify(life))}catch(_){}
 }
-
+function log(msg){
+  logs.unshift(msg);if(logs.length>7)logs.length=7;
+  logList.innerHTML=logs.map(x=>"<span>"+x+"</span>").join("");
+}
 function has(id){return life.upgrades.includes(id)}
 function movementMult(){return has("speed")?1.48:1}
-function miningMult(){return has("mining")?1.85:1}
-function visionMult(){return has("vision")?1.65:1}
+function toolMult(){return has("tool")?1.85:1}
+function visionRange(){return has("vision")?22:13.5}
 function detectionBoost(){return has("detection")?.14:0}
 function analysisMult(){return has("analysis")?1.75:1}
 function efficiencyMult(){return has("efficiency")?.63:1}
 
-function terrainHeight(x,z){
-  const raw=.55*Math.sin(x*.13+life.mapIndex*.9)+.42*Math.cos(z*.12-life.mapIndex*.4)+.25*Math.sin((x+z)*.08);
-  return Math.round(raw/.33)*.33;
+function recognitionLabel(z){
+  const m=mem();
+  if(m.recognized[z.id])return m.recognized[z.id];
+  if(m.discovered.includes(z.id))return z.className;
+  return"?";
 }
-
-function buildWorld(){
-  config=mapConfig(life.mapIndex);
-  const discovered=new Set(mem().discovered);
-  zones=config.zones.map(z=>({...z,taken:discovered.has(z.id)&&(z.kind==="parts"||z.kind==="core")}));
-  ambient=[];
-  obstacles=[];
-  const rand=seeded(4400+life.mapIndex*991);
-  const count=config.biome==="overworld"?36:28;
-  for(let i=0;i<count;i++){
-    let x=rand()*56-28,z=rand()*56-28;
-    if(Math.hypot(x,z)<4||zones.some(q=>Math.hypot(q.x-x,q.z-z)<3)){i--;continue}
-    let type=config.biome==="overworld"?"TREE":config.biome==="nether"?"BASALT":"CHORUS";
-    ambient.push({id:"A-"+life.mapIndex+"-"+i,x,z,type,radius:type==="TREE"?.75:.55,height:type==="TREE"?2.5:1.8});
-    obstacles.push({id:"A-"+life.mapIndex+"-"+i,x,z,radius:type==="TREE"?.65:.48});
-  }
-  for(let i=0;i<44;i++){
-    const x=rand()*58-29,z=rand()*58-29;
-    if(Math.hypot(x,z)<2.5)continue;
-    ambient.push({id:"B-"+life.mapIndex+"-"+i,x,z,type:config.biome==="end"?"END STONE":"STONE",radius:.22+rand()*.18,height:.35});
-  }
-  zones.forEach(z=>{
-    if(z.kind==="geology"||z.kind==="gate")obstacles.push({id:z.id,x:z.x,z:z.z,radius:z.kind==="gate"?1.1:.85});
-  });
-  updateMapUI();
-}
-
-function log(msg){
-  logs.unshift(msg);
-  if(logs.length>7)logs.length=7;
-  logList.innerHTML=logs.map(x=>"<span>"+x+"</span>").join("");
-}
-
+function identify(z){mem().recognized[z.id]=z.className}
 function exploration(){
-  return mem().discovered.length/Math.max(1,zones.length);
+  const m=mem();
+  return m.visited.length;
 }
-function knownUnexplored(){
-  const m=mem(),seen=new Set(m.seen),done=new Set(m.discovered);
-  return zones.filter(z=>seen.has(z.id)&&!done.has(z.id));
+function seenUnresolved(){
+  const m=mem(),done=new Set(m.discovered);
+  return zones.filter(z=>m.seen.includes(z.id)&&!done.has(z.id));
 }
-function unseenZones(){
+function unseenImportant(){
   const seen=new Set(mem().seen);
   return zones.filter(z=>!seen.has(z.id));
 }
-function cellKey(x,z){return Math.round(x/CELL)+","+Math.round(z/CELL)}
+
+function searchCellKey(x,y){return Math.round(x/SEARCH_CELL)+","+Math.round(y/SEARCH_CELL)}
 function markVisited(){
-  const m=mem(),k=cellKey(bot.x,bot.z);
+  const k=searchCellKey(bot.x,bot.y),m=mem();
   if(!m.visited.includes(k))m.visited.push(k);
 }
 function chooseFrontier(){
-  const m=mem(),visited=new Set(m.visited),c=[];
-  const desired=8.5+life.personality.curiosity*5;
-  for(let gx=-5;gx<=5;gx++)for(let gz=-5;gz<=5;gz++){
-    const x=gx*CELL,z=gz*CELL,k=gx+","+gz,d=Math.hypot(x-bot.x,z-bot.z);
-    if(visited.has(k)||d<3.5)continue;
-    c.push({x,z,k,score:-Math.abs(d-desired)*.55+Math.random()*2.2});
+  const m=mem(),visited=new Set(m.visited),cx=Math.round(bot.x/SEARCH_CELL),cy=Math.round(bot.y/SEARCH_CELL),c=[];
+  const desired=48+life.personality.curiosity*24;
+  for(let dx=-3;dx<=3;dx++)for(let dy=-3;dy<=3;dy++){
+    if(dx===0&&dy===0)continue;
+    const gx=cx+dx,gy=cy+dy,key=gx+","+gy,x=gx*SEARCH_CELL,y=gy*SEARCH_CELL;
+    if(Math.abs(x)>HALF-40||Math.abs(y)>HALF-40||visited.has(key))continue;
+    if(!passableTile(tileAt(x,y)))continue;
+    const d=dist(bot.x,bot.y,x,y);
+    const outward=Math.hypot(x,y)-Math.hypot(bot.x,bot.y);
+    c.push({x,y,key,score:-Math.abs(d-desired)*.055+Math.max(0,outward)*.008+Math.random()*2.5});
   }
-  if(!c.length){m.visited=[];return chooseFrontier()}
+  if(!c.length){
+    m.visited=[];
+    return chooseFrontier();
+  }
   c.sort((a,b)=>b.score-a.score);
   return c[0];
 }
@@ -236,102 +277,89 @@ function chooseFrontier(){
 function upgradeNeeds(){
   const e=life.exp;
   return{
-    speed:clamp(.28+e.distance/180+e.stucks*.08,0,1),
-    mining:clamp(.28+life.materials*.08+e.scans*.035,0,1),
-    vision:clamp(unseenZones().length/zones.length*.55+life.mapIndex*.05,0,1),
-    detection:clamp(.30+unseenZones().length/zones.length*.42+e.scans*.025,0,1),
-    analysis:clamp(.30+e.scans*.055+life.mapIndex*.04,0,1),
-    efficiency:clamp(.22+e.charges*.15+e.distance/220,0,1)
+    speed:clamp(.30+e.distance/1200+e.stucks*.08,0,1),
+    tool:clamp(.28+life.parts*.08+e.scans*.025,0,1),
+    vision:clamp(.34+unseenImportant().length/zones.length*.42,0,1),
+    detection:clamp(.32+unseenImportant().length/zones.length*.38+e.scans*.02,0,1),
+    analysis:clamp(.28+e.scans*.04+life.regionIndex*.04,0,1),
+    efficiency:clamp(.22+e.charges*.15+e.distance/1600,0,1)
   };
 }
 function desiredUpgrade(){
   const needs=upgradeNeeds();let best=null;
   for(const [id,d] of Object.entries(UPGRADE_DEFS)){
     if(has(id))continue;
-    const score=life.personality.improve*34+needs[id]*52+(life.materials>=d.cost?13:0)+Math.random()*7;
+    const score=life.personality.improve*34+needs[id]*52+(life.parts>=d.cost?13:0)+Math.random()*7;
     if(!best||score>best.score)best={id,...d,score,need:needs[id]};
   }
   return best;
 }
-
 function setMission(m,reason){
-  bot.mission={...m,mapIndex:life.mapIndex,startedAt:Date.now()};
+  bot.mission={...m,regionIndex:life.regionIndex,startedAt:Date.now()};
   life.currentMission=structuredClone(bot.mission);
   log("mission: "+bot.mission.label.toLowerCase()+" · "+reason);
-  decisionBadge.textContent="MISSION · "+bot.mission.label;
-  saveLife();
+  decisionBadge.textContent="MISSION · "+bot.mission.label;saveLife();
 }
 function finishMission(note){
   if(bot.mission)log("mission complete · "+bot.mission.label.toLowerCase()+" · "+note);
   bot.mission=null;life.currentMission=null;saveLife();think();
 }
-function abortMission(note){
-  if(bot.mission)log("mission replan · "+bot.mission.label.toLowerCase()+" · "+note);
-  bot.mission=null;life.currentMission=null;saveLife();think();
-}
 function think(){
-  bot.state="THINK";bot.timer=.7+rnd(.2,.6);bot.speed=0;bot.arm=0;
+  bot.state="THINK";bot.timer=.65+rnd(.20,.55);bot.speed=0;bot.arm=0;
   decisionBadge.textContent=bot.mission?"MISSION · "+bot.mission.label:"THINKING…";
 }
-
-function usefulUnknownForMission(mission){
-  const m=mem(),done=new Set(m.discovered);
-  const c=zones.filter(z=>m.seen.includes(z.id)&&!done.has(z.id));
+function usefulTarget(mission){
+  const m=mem(),done=new Set(m.discovered),c=zones.filter(z=>m.seen.includes(z.id)&&!done.has(z.id));
   if(mission.type==="evolve"){
-    const res=c.filter(z=>z.kind==="parts");
-    if(res.length)return res.sort((a,b)=>Math.hypot(a.x-bot.x,a.z-bot.z)-Math.hypot(b.x-bot.x,b.z-bot.z))[0];
+    const parts=c.filter(z=>z.kind==="parts");
+    if(parts.length)return parts.sort((a,b)=>dist(bot.x,bot.y,a.x,a.y)-dist(bot.x,bot.y,b.x,b.y))[0];
     return c.find(z=>recognitionLabel(z)==="?")||null;
   }
-  const portal=c.filter(z=>z.kind==="core"||z.kind==="gate");
-  if(portal.length)return portal.sort((a,b)=>Math.hypot(a.x-bot.x,a.z-bot.z)-Math.hypot(b.x-bot.x,b.z-bot.z))[0];
+  const path=c.filter(z=>z.kind==="core"||z.kind==="gate");
+  if(path.length)return path.sort((a,b)=>dist(bot.x,bot.y,a.x,a.y)-dist(bot.x,bot.y,b.x,b.y))[0];
   return c.find(z=>recognitionLabel(z)==="?")||null;
 }
-
 function chooseMission(){
   const m=mem(),p=life.personality,up=desiredUpgrade();
-  if(!up){setMission({type:"advance",label:"REACH NEXT DIMENSION"},"all current upgrades completed");continueMission();return}
-  const upgradeProgress=clamp(life.materials/up.cost,0,1);
-  const portalProgress=(m.portalKnown?.35:0)+(m.coreHeld?.35:0)+(m.portalActive?.45:0);
-  const evolve=48+p.improve*34+up.need*24+upgradeProgress*20+Math.random()*6;
-  const advance=44+p.curiosity*30+portalProgress*34+(life.upgrades.length>=2?8:0)+Math.random()*6;
-  if(advance>evolve)setMission({type:"advance",label:"REACH NEXT DIMENSION"},"portal progress is more valuable");
-  else setMission({type:"evolve",upgradeId:up.id,label:"SELF EVOLUTION · "+up.label},"capability improvement is more valuable");
+  if(!up){setMission({type:"advance",label:"REACH NEXT REGION"},"all current upgrades completed");continueMission();return}
+  const upProgress=clamp(life.parts/up.cost,0,1);
+  const gateProgress=(m.gateKnown?.35:0)+(m.keyHeld?.35:0)+(m.gateActive?.45:0);
+  const evolve=48+p.improve*34+up.need*24+upProgress*20+Math.random()*6;
+  const advance=44+p.curiosity*30+gateProgress*34+(life.upgrades.length>=2?8:0)+Math.random()*6;
+  if(advance>evolve)setMission({type:"advance",label:"REACH NEXT REGION"},"the next region is the stronger objective");
+  else setMission({type:"evolve",upgradeId:up.id,label:"SELF EVOLUTION · "+up.label},"capability improvement is the stronger objective");
   continueMission();
 }
-
-function startFrontierTravel(label){
+function startFrontierTravel(reason){
   const g=chooseFrontier();
-  bot.scanPhase=0;
-  startNavigation({x:g.x,z:g.z},"frontier",null,.68*movementMult());
-  log(label+" · viewpoint "+g.k);
+  startNavigation({x:g.x,y:g.y},"frontier",null,3.0*movementMult());
+  log(reason+" · search cell "+g.key);
 }
-
 function continueMission(){
-  const mission=bot.mission;
-  if(!mission){chooseMission();return}
+  const mission=bot.mission;if(!mission){chooseMission();return}
   const m=mem();
-  if(bot.battery<28+life.personality.caution*16){startCharge();return}
+  if(bot.battery<25+life.personality.caution*18){startCharge();return}
 
   if(mission.type==="evolve"){
     const d=UPGRADE_DEFS[mission.upgradeId];
     if(!d||has(mission.upgradeId)){finishMission("capability acquired");return}
-    if(life.materials>=d.cost){mission.step="INSTALLING "+d.label;startUpgrade({id:mission.upgradeId,...d});return}
-    const u=usefulUnknownForMission(mission);
-    if(u){mission.step="CHECK "+u.id+" FOR MATERIAL";navigateToZone(u);return}
-    const missing=d.cost-life.materials;
-    mission.step="FIND "+missing+" MATERIAL UNIT"+(missing===1?"":"S")+" FOR "+d.label;
-    startFrontierTravel("searching for upgrade material");return;
+    if(life.parts>=d.cost){mission.step="INSTALLING "+d.label;startUpgrade({id:mission.upgradeId,...d});return}
+    const t=usefulTarget(mission);
+    if(t){mission.step="CHECK "+t.id+" FOR PARTS";navigateToZone(t);return}
+    const missing=d.cost-life.parts;
+    mission.step="FIND "+missing+" MORE PART"+(missing===1?"":"S")+" FOR "+d.label;
+    startFrontierTravel("searching for upgrade parts");return;
   }
 
   if(mission.type==="advance"){
-    if(m.portalActive){mission.step="ENTER ACTIVE PORTAL";navigateToPortal("enter");return}
-    if(m.portalKnown&&m.coreHeld){mission.step="USE "+config.core+" ON "+config.portal;navigateToPortal("activate");return}
-    const u=usefulUnknownForMission(mission);
-    if(u){mission.step="CHECK "+u.id+" FOR PORTAL PROGRESS";navigateToZone(u);return}
-    mission.step=!m.portalKnown&&!m.coreHeld?"FIND PORTAL OR KEY ITEM":(!m.portalKnown?"FIND PORTAL FRAME":"FIND PORTAL KEY ITEM");
-    startFrontierTravel("searching for portal progress");return;
+    if(m.gateActive){mission.step="PASS THROUGH THE ACTIVE GATE";navigateToGate("enter");return}
+    if(m.gateKnown&&m.keyHeld){mission.step="BRING "+theme.key+" TO "+theme.gate;navigateToGate("activate");return}
+    const t=usefulTarget(mission);
+    if(t){mission.step="CHECK "+t.id+" FOR A WAY FORWARD";navigateToZone(t);return}
+    mission.step=!m.gateKnown&&!m.keyHeld?"FIND THE GATE OR ITS KEY":(!m.gateKnown?"FIND THE ANCIENT GATE":"FIND THE GATE KEY");
+    startFrontierTravel("searching for the next region");return;
   }
-  abortMission("invalid objective");
+  bot.mission=null;think();
 }
 function decideNext(){bot.mission?continueMission():chooseMission()}
 
@@ -339,490 +367,359 @@ function startNavigation(goal,purpose,target,speed){
   bot.goal=goal;bot.navPurpose=purpose;bot.target=target;bot.state="NAV";bot.targetSpeed=speed;bot.prevDist=Infinity;bot.stuckTime=0;
 }
 function navigateToZone(z){
-  const dx=bot.x-z.x,dz=bot.z-z.z,d=Math.max(.001,Math.hypot(dx,dz));
-  const stand=z.kind==="gate"?1.8:(z.kind==="geology"?1.3:1);
-  startNavigation({x:z.x+dx/d*stand,z:z.z+dz/d*stand},"explore",z,.70*movementMult());
+  const dx=bot.x-z.x,dy=bot.y-z.y,d=Math.max(.001,Math.hypot(dx,dy));
+  const stand=z.kind==="gate"?2.5:1.5;
+  startNavigation({x:z.x+dx/d*stand,y:z.y+dy/d*stand},"explore",z,3.0*movementMult());
   log("target selected · "+z.id);
 }
-function portalZone(){return zones.find(z=>z.kind==="gate")}
-function navigateToPortal(purpose){
-  const p=portalZone();if(!p){think();return}
-  startNavigation({x:p.x-1.4,z:p.z},purpose,p,.62*movementMult());
+function gateZone(){return zones.find(z=>z.kind==="gate")}
+function navigateToGate(purpose){
+  const g=gateZone();if(!g){think();return}
+  const angle=Math.atan2(bot.y-g.y,bot.x-g.x);
+  startNavigation({x:g.x+Math.cos(angle)*3,y:g.y+Math.sin(angle)*3},purpose,g,2.8*movementMult());
 }
 
-function obstacleSteer(goal){
-  const desired=Math.atan2(goal.z-bot.z,goal.x-bot.x);
-  const fx=bot.x+Math.cos(bot.heading)*1.0,fz=bot.z+Math.sin(bot.heading)*1.0;
-  let avoid=0;
-  for(const o of obstacles){
-    if(bot.target&&o.id===bot.target.id&&bot.navPurpose==="explore")continue;
-    const d=Math.hypot(fx-o.x,fz-o.z);
-    if(d<o.radius+.35){
-      let away=wrap(Math.atan2(fz-o.z,fx-o.x)-bot.heading);
-      if(Math.abs(away)<.1)away=(Math.random()<.5?-1:1)*.6;
-      avoid+=clamp(away,-1,1)*(1-d/(o.radius+.35))*1.8;
+function bestHeading(goal){
+  const desired=Math.atan2(goal.y-bot.y,goal.x-bot.x);
+  const offsets=[0,.22,-.22,.45,-.45,.75,-.75,1.1,-1.1,1.55,-1.55];
+  let best=desired,bestScore=-1e9;
+  for(const off of offsets){
+    const a=desired+off,nx=bot.x+Math.cos(a)*1.25,ny=bot.y+Math.sin(a)*1.25,t=tileAt(nx,ny);
+    if(!passableTile(t))continue;
+    const align=Math.cos(off)*2.2;
+    const terrain=terrainSpeed(t);
+    let objectPenalty=0;
+    for(const z of zones){
+      if(z.taken||bot.target&&z.id===bot.target.id)continue;
+      if((z.kind==="gate"||z.kind==="ruin")&&dist(nx,ny,z.x,z.y)<z.radius+.7)objectPenalty-=3;
     }
+    const score=align+terrain+objectPenalty+Math.random()*.08;
+    if(score>bestScore){bestScore=score;best=a}
   }
-  return wrap(desired+avoid);
+  return best;
 }
-
 function updateNavigation(dt){
   if(!bot.goal){think();return}
-  const dist=Math.hypot(bot.goal.x-bot.x,bot.goal.z-bot.z);
-  const desired=obstacleSteer(bot.goal),err=wrap(desired-bot.heading);
-  bot.heading=wrap(bot.heading+clamp(err*1.6,-1.15,1.15)*dt);
-  const turn=1-clamp(Math.abs(err)/1.6,0,.58);
-  const target=bot.targetSpeed*turn;
-  bot.speed+=(target-bot.speed)*Math.min(1,dt*2.6);
-  const step=bot.speed*dt;
-  bot.x=clamp(bot.x+Math.cos(bot.heading)*step,-29,29);
-  bot.z=clamp(bot.z+Math.sin(bot.heading)*step,-29,29);
-  life.exp.distance+=Math.abs(step);
+  const d=dist(bot.x,bot.y,bot.goal.x,bot.goal.y),desired=bestHeading(bot.goal),err=wrap(desired-bot.heading);
+  bot.heading=wrap(bot.heading+clamp(err*2.4,-2.0,2.0)*dt);
+  const terr=terrainSpeed(tileAt(bot.x,bot.y)),turn=1-clamp(Math.abs(err)/1.6,0,.55),target=bot.targetSpeed*terr*turn;
+  bot.speed+=(target-bot.speed)*Math.min(1,dt*3.2);
+  const step=bot.speed*dt,nx=bot.x+Math.cos(bot.heading)*step,ny=bot.y+Math.sin(bot.heading)*step;
+  if(passableTile(tileAt(nx,ny))){
+    bot.x=clamp(nx,-HALF+2,HALF-2);bot.y=clamp(ny,-HALF+2,HALF-2);life.exp.distance+=Math.abs(step);
+  }else bot.speed*=.35;
 
-  if(dist>bot.prevDist-.004)bot.stuckTime+=dt;else bot.stuckTime=Math.max(0,bot.stuckTime-dt);
-  bot.prevDist=dist;
-  if(bot.stuckTime>2.8){
-    life.exp.stucks++;bot.recoverSign=Math.random()<.5?-1:1;bot.state="RECOVER";bot.timer=1.4;bot.stuckTime=0;log("path blocked · recovery");
-    return;
+  if(d>bot.prevDist-.01)bot.stuckTime+=dt;else bot.stuckTime=Math.max(0,bot.stuckTime-dt*.8);
+  bot.prevDist=d;
+  if(bot.stuckTime>4.0){
+    life.exp.stucks++;bot.state="RECOVER";bot.timer=1.2;bot.recoverSign=Math.random()<.5?-1:1;bot.stuckTime=0;log("route blocked · changing course");return;
   }
 
-  if(dist<.28){
+  if(d<.6){
     bot.speed=0;
     if(bot.navPurpose==="explore")startScan(bot.target);
-    else if(bot.navPurpose==="activate")startPortalActivation();
+    else if(bot.navPurpose==="activate")startGateActivation();
     else if(bot.navPurpose==="enter")startTransit();
-    else if(bot.navPurpose==="frontier"){markVisited();log("goal-directed viewpoint reached");saveLife();think()}
+    else if(bot.navPurpose==="frontier"){markVisited();log("search cell reached");saveLife();think()}
     else think();
   }
 }
-
-function recognitionLabel(z){
-  const m=mem();
-  if(m.recognized[z.id])return m.recognized[z.id];
-  if(m.discovered.includes(z.id))return z.className;
-  return "?";
-}
-function identify(z){mem().recognized[z.id]=z.className}
-
-function startScan(z){
-  bot.state="SCAN";bot.target=z;bot.timer=2.5/analysisMult();bot.arm=0;life.exp.scans++;log("inspect · "+z.id);
-}
+function startScan(z){bot.state="SCAN";bot.target=z;bot.timer=2.5/analysisMult();bot.arm=0;life.exp.scans++;log("inspect · "+z.id)}
 function resolveScan(){
   const z=bot.target,m=mem();identify(z);
   if(z.kind==="gate"){
-    if(!m.discovered.includes(z.id))m.discovered.push(z.id);
-    m.portalKnown=true;log("portal identified · "+z.className.toLowerCase());saveLife();think();return;
+    if(!m.discovered.includes(z.id))m.discovered.push(z.id);m.gateKnown=true;life.discoveries++;log("ancient gate identified");saveLife();think();return;
   }
-  if(z.kind==="core"){
-    bot.state="PICKUP";bot.timer=2.2/miningMult();bot.arm=0;log("portal item identified · "+z.className.toLowerCase());return;
-  }
-  if(z.kind==="parts"){
-    bot.state="PICKUP";bot.timer=1.9/miningMult();bot.arm=0;log("resource identified · "+z.className.toLowerCase());return;
-  }
+  if(z.kind==="core"){bot.state="PICKUP";bot.timer=2.1/toolMult();bot.arm=0;log("gate key identified · "+z.className.toLowerCase());return}
+  if(z.kind==="parts"){bot.state="PICKUP";bot.timer=1.7/toolMult();bot.arm=0;log("usable parts found");return}
   if(!m.discovered.includes(z.id))m.discovered.push(z.id);
-  life.analyses++;
-  if((z.interest||0)>.7){bot.state="CONTACT";bot.timer=1.7/miningMult();bot.arm=0;log("close analysis selected")}
+  life.discoveries++;
+  if((z.interest||0)>.72){bot.state="CONTACT";bot.timer=1.6/analysisMult();bot.arm=0;log("closer inspection selected")}
   else{saveLife();think()}
 }
 function finishPickup(){
-  const z=bot.target,m=mem();
-  if(!m.discovered.includes(z.id))m.discovered.push(z.id);
-  if(z.kind==="core"){m.coreHeld=true;z.taken=true;log("inventory + "+z.className.toLowerCase())}
-  else{life.materials+=z.parts||1;z.taken=true;log("mined "+z.className.toLowerCase()+" · +"+(z.parts||1))}
-  saveLife();think();
+  const z=bot.target,m=mem();if(!m.discovered.includes(z.id))m.discovered.push(z.id);
+  if(z.kind==="core"){m.keyHeld=true;z.taken=true;log("inventory + "+z.className.toLowerCase())}
+  else{life.parts+=z.parts||1;z.taken=true;log("recovered parts · +"+(z.parts||1))}
+  life.discoveries++;saveLife();think();
 }
-function finishContact(){life.analyses++;log("analysis stored · "+bot.target.label);saveLife();think()}
-
-function startUpgrade(up){bot.state="UPGRADE";bot.timer=3.5;bot.upgradeChoice=up;bot.arm=0;log("self-upgrade · "+up.label.toLowerCase())}
+function finishContact(){life.discoveries++;log("discovery recorded · "+bot.target.label.toLowerCase());saveLife();think()}
+function startUpgrade(up){bot.state="UPGRADE";bot.timer=3.4;bot.upgradeChoice=up;bot.arm=0;log("self-upgrade · "+up.label.toLowerCase())}
 function finishUpgrade(){
-  const up=bot.upgradeChoice;
-  if(!up||life.materials<up.cost){think();return}
-  life.materials-=up.cost;life.upgrades.push(up.id);log("upgrade installed · "+up.label.toLowerCase());saveLife();
+  const up=bot.upgradeChoice;if(!up||life.parts<up.cost){think();return}
+  life.parts-=up.cost;life.upgrades.push(up.id);log("upgrade installed · "+up.label.toLowerCase());saveLife();
   if(bot.mission&&bot.mission.type==="evolve"&&bot.mission.upgradeId===up.id)finishMission("upgrade installed");else think();
 }
 function startCharge(){bot.state="CHARGE";bot.speed=0;bot.arm=0;life.exp.charges++;log("energy recovery")}
-function startPortalActivation(){bot.state="ACTIVATE_GATE";bot.timer=2.6;bot.arm=0;log("using "+config.core.toLowerCase()+" on "+config.portal.toLowerCase())}
-function finishPortalActivation(){const m=mem();m.coreHeld=false;m.portalActive=true;life.exp.portals++;log(config.portal.toLowerCase()+" activated");saveLife();think()}
-function startTransit(){bot.state="TRANSIT";bot.timer=1.8;bot.speed=.34;log("entering "+config.portal.toLowerCase())}
-function advanceMap(){
-  life.mapIndex++;life.position=null;life.currentMission=null;bot.mission=null;bot.x=0;bot.z=0;bot.heading=rnd(-Math.PI,Math.PI);bot.speed=0;bot.target=null;
-  buildWorld();bot.battery=Math.min(100,bot.battery+15);log("entered dimension · "+config.name.toLowerCase());saveLife();think();
+function startGateActivation(){bot.state="ACTIVATE_GATE";bot.timer=2.7;bot.arm=0;log("using "+theme.key.toLowerCase()+" on "+theme.gate.toLowerCase())}
+function finishGateActivation(){const m=mem();m.keyHeld=false;m.gateActive=true;life.exp.gates++;log(theme.gate.toLowerCase()+" activated");saveLife();think()}
+function startTransit(){bot.state="TRANSIT";bot.timer=1.8;bot.speed=0;log("passing through "+theme.gate.toLowerCase())}
+function advanceRegion(){
+  life.regionIndex++;life.position=null;life.currentMission=null;bot.mission=null;bot.x=0;bot.y=0;bot.heading=rnd(-Math.PI,Math.PI);bot.speed=0;bot.target=null;
+  buildRegion();bot.battery=Math.min(100,bot.battery+15);log("entered region · "+theme.name.toLowerCase());saveLife();think();
 }
 
-function cameraBearing(){return wrap(bot.heading+bot.headYaw)}
-function objectHeight(o){
-  if(o.kind==="gate")return 2.4;
-  if(o.kind==="core"||o.kind==="parts")return .6;
-  if(o.kind==="geology")return .9;
-  return o.height||.5;
-}
-function objectRadius(o){return o.radius||.45}
-function allVisuals(){
-  const a=ambient.filter(o=>!o.taken);
-  const z=zones.filter(o=>!o.taken);
-  return z.concat(a);
-}
-function segmentDistance(px,pz,ax,az,bx,bz){
-  const vx=bx-ax,vz=bz-az,wx=px-ax,wz=pz-az;
-  const len=vx*vx+vz*vz;if(len<1e-6)return Math.hypot(px-ax,pz-az);
-  const t=clamp((wx*vx+wz*vz)/len,0,1);
-  return Math.hypot(px-(ax+vx*t),pz-(az+vz*t));
-}
-function occluded(o){
-  const td=Math.hypot(o.x-bot.x,o.z-bot.z);
-  for(const q of ambient){
-    if(q===o||q.taken)continue;
-    const qd=Math.hypot(q.x-bot.x,q.z-bot.z);
-    if(qd>=td-.2)continue;
-    if(objectHeight(q)<.8)continue;
-    if(segmentDistance(q.x,q.z,bot.x,bot.z,o.x,o.z)<objectRadius(q)*.72)return true;
+function lineVisibility(z){
+  const d=dist(bot.x,bot.y,z.x,z.y),steps=Math.ceil(d);
+  let forestCount=0;
+  for(let i=1;i<steps;i++){
+    const t=i/steps,x=bot.x+(z.x-bot.x)*t,y=bot.y+(z.y-bot.y)*t,tile=tileAt(x,y);
+    if(tile==="mountain")return{blocked:true,forest:forestCount};
+    if(tile==="forest")forestCount++;
   }
-  return false;
+  return{blocked:false,forest:forestCount};
 }
-
 function detectObjects(){
-  const range=11.5*visionMult(),bearing=cameraBearing(),out=[];
-  for(const o of allVisuals()){
-    const dx=o.x-bot.x,dz=o.z-bot.z,dist=Math.hypot(dx,dz);
-    if(dist<.12||dist>range)continue;
-    const rel=wrap(Math.atan2(dz,dx)-bearing);
-    if(Math.abs(rel)>FOV*.5)continue;
-    if(occluded(o))continue;
-    const apparent=objectRadius(o)/dist;
-    const minApp=(o.kind?0.014:0.019)*(has("detection")?.62:1);
-    if(apparent<minApp)continue;
-    const centerScore=1-Math.abs(rel)/(FOV*.5);
-    const sizeScore=clamp(apparent/.12,0,1);
-    const distScore=1-dist/range;
-    const confidence=clamp(.18+.30*centerScore+.30*sizeScore+.08*distScore+detectionBoost(),.05,.99);
-    let cls="?";
-    if(o.kind){
-      cls=recognitionLabel(o);
-      if(o.kind==="geology"&&cls==="?"&&confidence>.60)cls=o.className;
-    }else{
-      const known=o.type==="TREE"?"TREE":o.type==="BASALT"?"BASALT":o.type==="CHORUS"?"CHORUS":o.type;
-      if(confidence>.66)cls=known;
-    }
-    out.push({o,dist,rel,confidence,cls,apparent});
+  const out=[],range=visionRange();
+  for(const z of zones){
+    if(z.taken)continue;
+    const d=dist(bot.x,bot.y,z.x,z.y);if(d<.2||d>range)continue;
+    const rel=wrap(Math.atan2(z.y-bot.y,z.x-bot.x)-bot.heading);
+    if(d>3&&Math.abs(rel)>VIEW_FOV*.5)continue;
+    const los=lineVisibility(z);if(los.blocked)continue;
+    const center=1-clamp(Math.abs(rel)/(VIEW_FOV*.5),0,1),distance=1-d/range,forestPenalty=Math.min(.35,los.forest*.025);
+    const confidence=clamp(.26+.28*center+.30*distance+detectionBoost()-forestPenalty,.05,.99);
+    if(confidence<.24)continue;
+    let cls=recognitionLabel(z);
+    if(z.kind==="ruin"&&cls==="?"&&confidence>.68)cls="RUINS";
+    out.push({z,d,rel,confidence,cls});
   }
-  out.sort((a,b)=>Math.abs(a.rel)-Math.abs(b.rel)||a.dist-b.dist);
+  out.sort((a,b)=>Math.abs(a.rel)-Math.abs(b.rel)||a.d-b.d);
   return out;
 }
-
-let detections=[];
 function updatePerception(){
-  detections=detectObjects();
-  const m=mem();
+  detections=detectObjects();const m=mem();
   for(const d of detections){
-    const z=d.o;
-    if(!z.kind)continue;
-    if(d.confidence>=.30&&!m.seen.includes(z.id)){
+    const z=d.z;
+    if(d.confidence>=.32&&!m.seen.includes(z.id)){
       m.seen.push(z.id);
       log("visual contact · "+z.id+" · "+(d.cls==="?"?"?":d.cls.toLowerCase())+" · "+Math.round(d.confidence*100)+"%");
       saveLife();
-      if(bot.state==="NAV"&&bot.navPurpose==="frontier"){
-        bot.speed=0;
-        if(bot.mission)bot.mission.step="NEW VISUAL CONTACT · CHECK RELEVANCE";
-        think();
-      }
+      if(bot.state==="NAV"&&bot.navPurpose==="frontier"){bot.speed=0;if(bot.mission)bot.mission.step="NEW CLUE FOUND · CHECK RELEVANCE";think()}
     }
   }
 }
-
-function canSeeTarget(){
-  if(!bot.target)return false;
-  return detections.some(d=>d.o.id===bot.target.id&&d.confidence>.20);
-}
-
-function updateHead(dt,time){
-  let y=0,p=-.08;
-  if(bot.state==="NAV"&&bot.navPurpose==="frontier"){
-    bot.scanPhase+=dt;
-    y=Math.sin(bot.scanPhase*1.15)*1.05;
-    p=Math.sin(bot.scanPhase*.7)>.1?-.42:-.08;
-    decisionBadge.textContent=Math.sin(bot.scanPhase*.7)>.1?"MOVING · NEAR FIELD":"MOVING · HORIZON";
-  }else if(["SCAN","PICKUP","CONTACT","ACTIVATE_GATE"].includes(bot.state)&&bot.target){
-    const bearing=Math.atan2(bot.target.z-bot.z,bot.target.x-bot.x);
-    y=clamp(wrap(bearing-bot.heading),-1.55,1.55);
-    p=-.18;
-  }else if(bot.state==="THINK"){
-    y=Math.sin(time*.0007)*.8;p=-.08;
-  }else if(bot.state==="UPGRADE"){
-    y=-.55;p=-.55;
-  }else if(bot.state==="NAV"){
-    y=0;p=-.12;
-  }
-  bot.headTargetYaw=y;bot.headTargetPitch=p;
-  const ys=dt*(has("vision")?2.7:2.1),ps=dt*1.7;
-  bot.headYaw+=clamp(wrap(bot.headTargetYaw-bot.headYaw),-ys,ys);
-  bot.headPitch+=clamp(bot.headTargetPitch-bot.headPitch,-ps,ps);
-}
+function canSeeTarget(){return bot.target&&detections.some(d=>d.z.id===bot.target.id&&d.confidence>.20)}
 
 function updateBehavior(dt,time){
   if(bot.state==="THINK"){bot.timer-=dt;if(bot.timer<=0)decideNext()}
   else if(bot.state==="NAV")updateNavigation(dt);
-  else if(bot.state==="SCAN"){
-    if(canSeeTarget())bot.timer-=dt;
-    if(bot.timer<=0)resolveScan();
-  }else if(bot.state==="PICKUP"){
-    if(canSeeTarget()){bot.timer-=dt;bot.arm=clamp(bot.arm+dt*.7*miningMult(),0,1)}
-    if(bot.timer<=0)finishPickup();
-  }else if(bot.state==="CONTACT"){
-    if(canSeeTarget()){bot.timer-=dt;bot.arm=clamp(bot.arm+dt*.65*miningMult(),0,1)}
-    if(bot.timer<=0)finishContact();
-  }else if(bot.state==="UPGRADE"){
-    bot.timer-=dt;bot.arm=.55+.35*Math.sin(time*.008)**2;
-    if(bot.timer<=0)finishUpgrade();
-  }else if(bot.state==="ACTIVATE_GATE"){
-    if(canSeeTarget()){bot.timer-=dt;bot.arm=clamp(1-bot.timer/2.6,0,1)}
-    if(bot.timer<=0)finishPortalActivation();
-  }else if(bot.state==="CHARGE"){
-    bot.battery=Math.min(100,bot.battery+dt*(has("efficiency")?3.8:2.7));
-    if(bot.battery>=72){saveLife();think()}
-  }else if(bot.state==="RECOVER"){
-    bot.timer-=dt;bot.speed=-.25;bot.heading=wrap(bot.heading+bot.recoverSign*.55*dt);
-    bot.x=clamp(bot.x+Math.cos(bot.heading)*bot.speed*dt,-29,29);
-    bot.z=clamp(bot.z+Math.sin(bot.heading)*bot.speed*dt,-29,29);
-    if(bot.timer<=0){bot.speed=0;think()}
-  }else if(bot.state==="TRANSIT"){
-    bot.timer-=dt;
-    if(bot.timer<=0)advanceMap();
-  }
-  if(Math.abs(bot.speed)>.06){markVisited();bot.walkPhase+=Math.abs(bot.speed)*dt*8}
-  const work=["SCAN","PICKUP","CONTACT","UPGRADE","ACTIVATE_GATE"].includes(bot.state)?.07:0;
-  if(bot.state!=="CHARGE")bot.battery=Math.max(0,bot.battery-dt*((Math.abs(bot.speed)>.06?.28:.06)+work)*efficiencyMult());
+  else if(bot.state==="SCAN"){if(canSeeTarget())bot.timer-=dt;if(bot.timer<=0)resolveScan()}
+  else if(bot.state==="PICKUP"){if(canSeeTarget()){bot.timer-=dt;bot.arm=clamp(bot.arm+dt*.72*toolMult(),0,1)}if(bot.timer<=0)finishPickup()}
+  else if(bot.state==="CONTACT"){if(canSeeTarget()){bot.timer-=dt;bot.arm=clamp(bot.arm+dt*.65*analysisMult(),0,1)}if(bot.timer<=0)finishContact()}
+  else if(bot.state==="UPGRADE"){bot.timer-=dt;bot.arm=.55+.35*Math.sin(time*.008)**2;if(bot.timer<=0)finishUpgrade()}
+  else if(bot.state==="ACTIVATE_GATE"){if(canSeeTarget()){bot.timer-=dt;bot.arm=clamp(1-bot.timer/2.7,0,1)}if(bot.timer<=0)finishGateActivation()}
+  else if(bot.state==="CHARGE"){bot.battery=Math.min(100,bot.battery+dt*(has("efficiency")?3.8:2.6));if(bot.battery>=74){saveLife();think()}}
+  else if(bot.state==="RECOVER"){bot.timer-=dt;bot.heading=wrap(bot.heading+bot.recoverSign*1.5*dt);if(bot.timer<=0)think()}
+  else if(bot.state==="TRANSIT"){bot.timer-=dt;if(bot.timer<=0)advanceRegion()}
+
+  if(Math.abs(bot.speed)>.05){markVisited();bot.walkPhase+=Math.abs(bot.speed)*dt*5.2}
+  const work=["SCAN","PICKUP","CONTACT","UPGRADE","ACTIVATE_GATE"].includes(bot.state)?.06:0;
+  if(bot.state!=="CHARGE")bot.battery=Math.max(0,bot.battery-dt*((Math.abs(bot.speed)>.05?.16:.035)+work)*efficiencyMult());
   if(bot.battery<2&&bot.state!=="CHARGE")startCharge();
 }
 
 function activityCopy(){
-  const z=bot.target,d=z?Math.hypot(z.x-bot.x,z.z-bot.z):0;
+  const z=bot.target,d=z?dist(bot.x,bot.y,z.x,z.y):0;
   switch(bot.state){
     case"THINK":return["次の行動を考えています。","現在の最大目標を進める方法を選んでいます。"];
     case"NAV":return[
-      bot.navPurpose==="explore"?"見つけた対象へ移動中。":bot.navPurpose==="activate"?"ポータルへ戻っています。":bot.navPurpose==="enter"?"次のディメンションへ向かっています。":"最大目標のため探索移動中。",
-      bot.navPurpose==="frontier"?"素材またはポータルの手掛かりを探しながら歩いています。":(z?"目標まで "+d.toFixed(1)+" m。":"移動中。")
+      bot.navPurpose==="explore"?"見つけた場所へ向かっています。":bot.navPurpose==="activate"?"古代の門へ戻っています。":bot.navPurpose==="enter"?"次の地域へ向かっています。":"最大目標のため探索移動中。",
+      bot.navPurpose==="frontier"?"部品または次地域への手掛かりを探しています。":(z?"目標まで "+d.toFixed(1)+" tile。":"移動中。")
     ];
-    case"SCAN":return["対象を解析しています。","カメラで正体を確定しています。"];
-    case"PICKUP":return["採掘・回収しています。","右腕で対象を回収しています。"];
-    case"CONTACT":return["近距離解析中。","対象を詳しく調べています。"];
+    case"SCAN":return["対象を調べています。","何なのかを確認しています。"];
+    case"PICKUP":return["回収しています。","右腕で部品・遺物を回収しています。"];
+    case"CONTACT":return["近距離調査中。","遺跡を詳しく確認しています。"];
     case"UPGRADE":return["自己アップグレード中。",bot.upgradeChoice?bot.upgradeChoice.label+" を組み込んでいます。":"モジュールを組み込んでいます。"];
-    case"ACTIVATE_GATE":return["ポータルを起動しています。",config.core+" を使用しています。"];
-    case"CHARGE":return["エネルギー回復中。","一時停止して行動可能量を回復しています。"];
-    case"RECOVER":return["経路復帰中。","別の方向へ抜けます。"];
-    case"TRANSIT":return["ポータル通過中。","次のディメンションへ移動します。"];
+    case"ACTIVATE_GATE":return["古代の門を起動しています。",theme.key+" を使用しています。"];
+    case"CHARGE":return["エネルギー回復中。","しばらく停止します。"];
+    case"RECOVER":return["経路を変更しています。","通れない地形を避けます。"];
+    case"TRANSIT":return["門を通過しています。","次の地域へ移動します。"];
     default:return["自律動作中。",""];
   }
 }
 
-function updateMapUI(){mapText.textContent="DIMENSION "+String(life.mapIndex+1).padStart(2,"0")+" · "+config.name}
 function updateUI(){
-  const m=mem(),copy=activityCopy(),pct=Math.round(exploration()*100);
+  const m=mem(),copy=activityCopy();
   stateText.textContent=bot.state;activityText.textContent=copy[0];detailText.textContent=copy[1];
-  const mission=bot.mission;
-  missionText.textContent=mission?mission.label:"NO MISSION";
-  if(!mission)missionStepText.textContent="次の最大目標を選んでいます。";
-  else if(mission.type==="evolve"){
-    const d=UPGRADE_DEFS[mission.upgradeId],need=Math.max(0,(d?d.cost:0)-life.materials);
-    missionStepText.textContent=mission.step||(need?"改造材料をあと "+need+" 個探します。":"必要材料が揃いました。");
-  }else missionStepText.textContent=mission.step||(m.portalActive?"次のディメンションへ進みます。":m.portalKnown?(m.coreHeld?config.core+" をポータルへ運びます。":"起動アイテムを探します。"):"ポータルと起動アイテムを探します。");
+  mapText.textContent="REGION "+String(life.regionIndex+1).padStart(2,"0")+" · "+theme.name;
+  missionText.textContent=bot.mission?bot.mission.label:"NO MISSION";
+  if(!bot.mission)missionStepText.textContent="次の最大目標を選んでいます。";
+  else if(bot.mission.type==="evolve"){
+    const d=UPGRADE_DEFS[bot.mission.upgradeId],need=Math.max(0,(d?d.cost:0)-life.parts);
+    missionStepText.textContent=bot.mission.step||(need?"改造部品をあと "+need+" 個探します。":"必要部品が揃いました。");
+  }else{
+    missionStepText.textContent=bot.mission.step||(m.gateActive?"門は起動済みです。次の地域へ進みます。":m.gateKnown?(m.keyHeld?theme.key+" を門へ運びます。":"門を開く遺物を探します。"):"古代の門とキー遺物を探します。");
+  }
   batteryText.textContent="BATTERY "+Math.round(bot.battery)+"%";
-  speedText.textContent="SPEED "+Math.abs(bot.speed).toFixed(2)+" m/s";
-  partsText.textContent="MATERIALS "+life.materials;
-  sampleText.textContent="ANALYSES "+life.analyses;
-  exploreText.textContent="EXPLORED "+pct+"%";
-  headingText.textContent="H "+Math.round((deg(bot.heading)+360)%360)+"° · HEAD "+Math.round(deg(bot.headYaw))+"°";
+  speedText.textContent="SPEED "+Math.abs(bot.speed).toFixed(2)+" tile/s";
+  partsText.textContent="PARTS "+life.parts;
+  sampleText.textContent="DISCOVERIES "+life.discoveries;
+  exploreText.textContent="WORLD "+WORLD_SIZE+"×"+WORLD_SIZE;
+  headingText.textContent="X "+Math.round(bot.x)+" · Y "+Math.round(bot.y)+" · DIR "+Math.round((deg(bot.heading)+360)%360)+"°";
   curiosityFill.style.width=Math.round(life.personality.curiosity*100)+"%";
   cautionFill.style.width=Math.round(life.personality.caution*100)+"%";
   improveFill.style.width=Math.round(life.personality.improve*100)+"%";
   curiosityText.textContent=Math.round(life.personality.curiosity*100);
   cautionText.textContent=Math.round(life.personality.caution*100);
   improveText.textContent=Math.round(life.personality.improve*100);
-  upgradeList.innerHTML=life.upgrades.length?life.upgrades.map(u=>'<span class="upgrade-chip">'+UPGRADE_DEFS[u].label+' · '+UPGRADE_DEFS[u].effect+'</span>').join(""):'<span class="empty-chip">stock humanoid configuration</span>';
-  const inv=[];
-  if(m.coreHeld)inv.push(config.core);
-  if(m.portalKnown)inv.push(m.portalActive?"PORTAL: ACTIVE":"PORTAL: FOUND");
-  if(life.materials)inv.push("MATERIAL UNITS ×"+life.materials);
-  inventoryList.innerHTML=inv.length?inv.map(x=>'<span class="item-chip">'+x+'</span>').join(""):'<span class="empty-chip">nothing unusual yet</span>';
+  upgradeList.innerHTML=life.upgrades.length?life.upgrades.map(u=>'<span class="upgrade-chip">'+UPGRADE_DEFS[u].label+' · '+UPGRADE_DEFS[u].effect+'</span>').join(""):'<span class="empty-chip">stock configuration</span>';
+  const inv=[];if(m.keyHeld)inv.push(theme.key);if(m.gateKnown)inv.push(m.gateActive?"GATE: ACTIVE":"GATE: FOUND");if(life.parts)inv.push("PARTS ×"+life.parts);
+  inventoryList.innerHTML=inv.length?inv.map(x=>'<span class="item-chip">'+x+'</span>').join(""):'<span class="empty-chip">nothing important yet</span>';
 }
 
-function shade(hex,amount){
-  const n=parseInt(hex.slice(1),16),r=(n>>16)&255,g=(n>>8)&255,b=n&255;
-  const f=1-amount;
-  return"rgb("+Math.round(r*f)+","+Math.round(g*f)+","+Math.round(b*f)+")";
-}
+function drawTile(tx,ty,px,py,size,type){
+  const c=theme.colors;
+  let fill=c.grass;
+  if(type==="forest")fill=c.forest;
+  else if(type==="water")fill=c.water;
+  else if(type==="mountain")fill=c.mountain;
+  else if(type==="sand")fill=c.sand;
+  else if(type==="snow")fill="#d6e3e3";
+  else if(type==="void")fill="#0b0c10";
+  ctx.fillStyle=fill;ctx.fillRect(px,py,size,size);
 
-function worldToScreen(x,z,h,centerX,centerZ,scale){
-  const dx=x-centerX,dz=z-centerZ;
-  return{
-    x:canvas.width*.5+(dx-dz)*scale,
-    y:canvas.height*.52+(dx+dz)*scale*.48-h*scale*1.1
-  };
-}
-
-function drawDiamond(x,y,s,fill,stroke){
-  ctx.beginPath();ctx.moveTo(x,y-s*.48);ctx.lineTo(x+s,y);ctx.lineTo(x,y+s*.48);ctx.lineTo(x-s,y);ctx.closePath();
-  ctx.fillStyle=fill;ctx.fill();if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=1;ctx.stroke()}
-}
-
-function drawWorldTile(x,z,centerX,centerZ,scale){
-  const h=terrainHeight(x,z),p=worldToScreen(x,z,h,centerX,centerZ,scale);
-  drawDiamond(p.x,p.y,scale*.98,config.ground,"rgba(0,0,0,.10)");
-}
-
-function drawObjectIso(o,centerX,centerZ,scale){
-  if(o.taken)return;
-  const h=terrainHeight(o.x,o.z),p=worldToScreen(o.x,o.z,h,centerX,centerZ,scale);
-  const s=scale;
-  if(o.kind==="gate"){
-    const active=mem().portalActive;
-    ctx.strokeStyle="#211b2b";ctx.lineWidth=Math.max(4,s*.28);
-    ctx.strokeRect(p.x-s*.55,p.y-s*1.35,s*1.1,s*1.35);
-    if(active){ctx.fillStyle="rgba(151,76,212,.65)";ctx.fillRect(p.x-s*.43,p.y-s*1.22,s*.86,s*1.10)}
-    return;
+  const h=hash2(tx,ty,life.regionIndex*71+5);
+  if(type==="grass"){
+    ctx.fillStyle=h>.5?c.grass2:"rgba(255,255,255,.08)";
+    ctx.fillRect(px+3+(h*7|0),py+5,size>26?3:2,size>26?3:2);
+  }else if(type==="forest"){
+    ctx.fillStyle=c.forest2;
+    ctx.fillRect(px+size*.22,py+size*.18,size*.56,size*.48);
+    ctx.fillStyle="#5a432b";ctx.fillRect(px+size*.44,py+size*.62,size*.12,size*.26);
+  }else if(type==="water"){
+    ctx.fillStyle=c.water2;ctx.fillRect(px+3,py+size*.30,size*.50,2);ctx.fillRect(px+size*.45,py+size*.68,size*.40,2);
+  }else if(type==="mountain"){
+    ctx.fillStyle=c.mountain2;
+    ctx.beginPath();ctx.moveTo(px+size*.15,py+size*.78);ctx.lineTo(px+size*.5,py+size*.15);ctx.lineTo(px+size*.85,py+size*.78);ctx.closePath();ctx.fill();
+  }else if(type==="sand"){
+    ctx.fillStyle="rgba(90,70,30,.18)";ctx.fillRect(px+size*.25,py+size*.30,2,2);ctx.fillRect(px+size*.70,py+size*.72,2,2);
+  }else if(type==="snow"){
+    ctx.fillStyle="rgba(95,130,150,.20)";ctx.fillRect(px+size*.25,py+size*.55,size*.35,2);
   }
-  if(o.kind==="parts"||o.kind==="core"||o.kind==="geology"){
-    const col=o.kind==="parts"?"#777":o.kind==="core"?"#a77b45":config.rock;
-    ctx.fillStyle=col;ctx.fillRect(p.x-s*.32,p.y-s*.46,s*.64,s*.46);
-    if(o.kind==="parts"){ctx.fillStyle=o.className.includes("REDSTONE")?"#b52b2b":o.className.includes("GOLD")?"#d8b33f":o.className.includes("IRON")?"#c6c6c1":"#e7e0d7";ctx.fillRect(p.x-s*.12,p.y-s*.39,s*.20,s*.16)}
-    return;
-  }
-  if(o.type==="TREE"){
-    ctx.fillStyle="#795438";ctx.fillRect(p.x-s*.10,p.y-s*.90,s*.20,s*.90);
-    ctx.fillStyle="#447c38";ctx.fillRect(p.x-s*.42,p.y-s*1.38,s*.84,s*.62);
-  }else if(o.type==="BASALT"){
-    ctx.fillStyle="#39343a";ctx.fillRect(p.x-s*.18,p.y-s*1.05,s*.36,s*1.05);
-  }else if(o.type==="CHORUS"){
-    ctx.fillStyle="#745b79";ctx.fillRect(p.x-s*.10,p.y-s*.92,s*.20,s*.92);
-    ctx.fillStyle="#9a78a2";ctx.fillRect(p.x-s*.27,p.y-s*1.15,s*.54,s*.30);
-  }else{
-    ctx.fillStyle=config.rock;ctx.fillRect(p.x-s*.18,p.y-s*.22,s*.36,s*.22);
-  }
+  ctx.strokeStyle="rgba(0,0,0,.055)";ctx.strokeRect(px+.5,py+.5,size-1,size-1);
 }
 
-function drawBotIso(centerX,centerZ,scale){
-  const p=worldToScreen(bot.x,bot.z,terrainHeight(bot.x,bot.z),centerX,centerZ,scale);
-  const s=Math.max(12,scale*.85);
-  const walk=Math.sin(bot.walkPhase)*s*.12;
-  ctx.save();ctx.translate(p.x,p.y);
-  ctx.fillStyle="#33383a";
-  ctx.fillRect(-s*.22+walk*.15,-s*.72,s*.18,s*.58);
-  ctx.fillRect(s*.04-walk*.15,-s*.72,s*.18,s*.58);
-  ctx.fillStyle="#b7b7b1";ctx.fillRect(-s*.30,-s*1.28,s*.60,s*.62);
-  ctx.fillStyle="#b7b7b1";ctx.fillRect(-s*.47,-s*1.23,s*.16,s*.58);ctx.fillRect(s*.31,-s*1.23,s*.16,s*.58);
-  ctx.fillStyle="#b7b7b1";ctx.fillRect(-s*.28,-s*1.72,s*.56,s*.40);
-  ctx.fillStyle="#22282a";ctx.fillRect(-s*.27,-s*1.62,s*.04,s*.16);
-  ctx.fillStyle="#8ed6c7";ctx.fillRect(s*.17,-s*1.59,s*.05,s*.05);ctx.fillRect(s*.17,-s*1.48,s*.05,s*.05);
-  if(has("speed")){ctx.fillStyle="#4f8051";ctx.fillRect(-s*.25,-s*.18,s*.22,s*.10);ctx.fillRect(s*.03,-s*.18,s*.22,s*.10)}
-  if(has("vision")){ctx.fillStyle="rgba(80,170,200,.75)";ctx.fillRect(-s*.29,-s*1.60,s*.58,s*.12)}
-  if(has("detection")){ctx.fillStyle="#72c6b2";ctx.fillRect(-s*.03,-s*1.92,s*.06,s*.20);ctx.fillRect(-s*.08,-s*1.98,s*.16,s*.08)}
-  if(has("efficiency")){ctx.fillStyle="#7bd477";ctx.fillRect(-s*.08,-s*1.08,s*.16,s*.16)}
-  if(has("mining")){ctx.strokeStyle="#58b7c5";ctx.lineWidth=Math.max(2,s*.06);ctx.beginPath();ctx.moveTo(s*.40,-s*.74);ctx.lineTo(s*.70,-s*.15);ctx.stroke()}
+function screenFor(x,y,tileSize){
+  return{x:canvas.width*.5+(x-bot.x)*tileSize,y:canvas.height*.5+(y-bot.y)*tileSize};
+}
+function drawPOI(z,tileSize){
+  if(z.taken)return;
+  const p=screenFor(z.x,z.y,tileSize);
+  if(p.x<-40||p.y<-40||p.x>canvas.width+40||p.y>canvas.height+40)return;
+  const s=Math.max(8,tileSize*.62),known=mem().seen.includes(z.id);
+  ctx.save();ctx.translate(Math.round(p.x),Math.round(p.y));
+  if(z.kind==="parts"){
+    ctx.fillStyle="#7c603c";ctx.fillRect(-s*.45,-s*.35,s*.9,s*.70);
+    ctx.fillStyle="#d7b85f";ctx.fillRect(-s*.34,-s*.28,s*.68,s*.12);
+  }else if(z.kind==="ruin"){
+    ctx.fillStyle="#aaa48b";ctx.fillRect(-s*.45,-s*.55,s*.25,s);ctx.fillRect(s*.20,-s*.55,s*.25,s);ctx.fillRect(-s*.45,-s*.55,s*.90,s*.20);
+  }else if(z.kind==="core"){
+    ctx.fillStyle="#e4d36b";ctx.beginPath();ctx.moveTo(0,-s*.55);ctx.lineTo(s*.45,0);ctx.lineTo(0,s*.55);ctx.lineTo(-s*.45,0);ctx.closePath();ctx.fill();
+  }else if(z.kind==="gate"){
+    ctx.fillStyle="#6f6c64";ctx.fillRect(-s*.60,-s*.75,s*.25,s*1.5);ctx.fillRect(s*.35,-s*.75,s*.25,s*1.5);ctx.fillRect(-s*.60,-s*.75,s*1.2,s*.25);
+    if(mem().gateActive){ctx.fillStyle="rgba(103,180,220,.75)";ctx.fillRect(-s*.25,-s*.48,s*.5,s*.98)}
+  }
+  if(known){
+    ctx.fillStyle="rgba(12,14,12,.72)";ctx.fillRect(-s*.65,s*.62,s*1.3,12);
+    ctx.fillStyle="#f4f0d8";ctx.font="9px ui-monospace,monospace";ctx.textAlign="center";ctx.fillText(recognitionLabel(z),0,s*.62+9);
+  }
   ctx.restore();
 }
 
-function renderWorld(close){
-  const scale=close?26:15,centerX=bot.x,centerZ=bot.z;
-  ctx.fillStyle=config.sky;ctx.fillRect(0,0,canvas.width,canvas.height);
-  const radius=close?10:18;
-  const items=[];
-  for(let ix=Math.floor(centerX-radius);ix<=Math.ceil(centerX+radius);ix++){
-    for(let iz=Math.floor(centerZ-radius);iz<=Math.ceil(centerZ+radius);iz++){
-      if(ix<-31||ix>31||iz<-31||iz>31)continue;
-      items.push({kind:"tile",x:ix,z:iz,depth:ix+iz});
+function facing4(){
+  const a=(bot.heading+Math.PI*2)%(Math.PI*2);
+  if(a<Math.PI*.25||a>=Math.PI*1.75)return"right";
+  if(a<Math.PI*.75)return"down";
+  if(a<Math.PI*1.25)return"left";
+  return"up";
+}
+function drawBot(tileSize){
+  const x=Math.round(canvas.width*.5),y=Math.round(canvas.height*.5),s=Math.max(12,tileSize*.72),walk=Math.sin(bot.walkPhase)>0?1:0,dir=facing4();
+  ctx.save();ctx.translate(x,y);
+  ctx.fillStyle="rgba(0,0,0,.22)";ctx.fillRect(-s*.30,s*.26,s*.60,s*.16);
+  ctx.fillStyle="#40484c";ctx.fillRect(-s*.22,-s*.06,s*.18,s*.34);ctx.fillRect(s*.04,-s*.06,s*.18,s*.34);
+  if(walk){ctx.fillRect(-s*.27,s*.17,s*.18,s*.08);ctx.clearRect(s*.09,s*.18,s*.14,s*.08)}
+  ctx.fillStyle="#bbbcb3";ctx.fillRect(-s*.31,-s*.62,s*.62,s*.56);
+  ctx.fillStyle="#777f78";ctx.fillRect(-s*.46,-s*.56,s*.13,s*.48);ctx.fillRect(s*.33,-s*.56,s*.13,s*.48);
+  ctx.fillStyle="#c9c9c1";ctx.fillRect(-s*.28,-s*.98,s*.56,s*.34);
+  ctx.fillStyle="#243036";
+  if(dir==="right"){ctx.fillRect(s*.18,-s*.86,s*.05,s*.05);ctx.fillRect(s*.18,-s*.73,s*.05,s*.05)}
+  else if(dir==="left"){ctx.fillRect(-s*.23,-s*.86,s*.05,s*.05);ctx.fillRect(-s*.23,-s*.73,s*.05,s*.05)}
+  else{ctx.fillRect(-s*.14,-s*.84,s*.05,s*.05);ctx.fillRect(s*.09,-s*.84,s*.05,s*.05)}
+  if(has("speed")){ctx.fillStyle="#5fa160";ctx.fillRect(-s*.25,s*.20,s*.20,s*.08);ctx.fillRect(s*.05,s*.20,s*.20,s*.08)}
+  if(has("vision")){ctx.fillStyle="#5b9fb3";ctx.fillRect(-s*.29,-s*.86,s*.58,s*.08)}
+  if(has("detection")){ctx.fillStyle="#75c7aa";ctx.fillRect(-s*.03,-s*1.10,s*.06,s*.13)}
+  if(has("efficiency")){ctx.fillStyle="#77d178";ctx.fillRect(-s*.07,-s*.42,s*.14,s*.14)}
+  ctx.restore();
+}
+
+function renderMap(tileSize,sensor=false){
+  ctx.fillStyle="#111";ctx.fillRect(0,0,canvas.width,canvas.height);
+  const cols=Math.ceil(canvas.width/tileSize)+4,rows=Math.ceil(canvas.height/tileSize)+4;
+  const startX=Math.floor(bot.x-cols/2),startY=Math.floor(bot.y-rows/2);
+  for(let j=0;j<rows;j++)for(let i=0;i<cols;i++){
+    const tx=startX+i,ty=startY+j,p=screenFor(tx+.5,ty+.5,tileSize);
+    drawTile(tx,ty,Math.round(p.x-tileSize*.5),Math.round(p.y-tileSize*.5),Math.ceil(tileSize)+1,tileAt(tx,ty));
+  }
+  zones.forEach(z=>drawPOI(z,tileSize));
+  drawBot(tileSize);
+
+  if(sensor){
+    ctx.fillStyle="rgba(3,10,16,.42)";ctx.fillRect(0,0,canvas.width,canvas.height);
+    const range=visionRange()*tileSize;
+    ctx.strokeStyle="rgba(100,220,190,.45)";ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(canvas.width*.5,canvas.height*.5,range,0,Math.PI*2);ctx.stroke();
+    for(const d of detections){
+      const p=screenFor(d.z.x,d.z.y,tileSize);
+      ctx.strokeStyle=d.cls==="?"?"#e6c16d":"#9ee5c4";ctx.lineWidth=2;ctx.strokeRect(p.x-8,p.y-8,16,16);
+      ctx.fillStyle="rgba(5,10,8,.75)";ctx.fillRect(p.x+10,p.y-16,100,22);
+      ctx.fillStyle=d.cls==="?"?"#efd08a":"#c7eedb";ctx.font="10px ui-monospace,monospace";ctx.fillText(d.cls+" "+Math.round(d.confidence*100)+"%",p.x+14,p.y-2);
     }
   }
-  allVisuals().forEach(o=>{if(Math.abs(o.x-centerX)<radius+4&&Math.abs(o.z-centerZ)<radius+4)items.push({kind:"obj",o,depth:o.x+o.z+.3})});
-  items.push({kind:"bot",depth:bot.x+bot.z+.5});
-  items.sort((a,b)=>a.depth-b.depth);
-  for(const it of items){
-    if(it.kind==="tile")drawWorldTile(it.x,it.z,centerX,centerZ,scale);
-    else if(it.kind==="obj")drawObjectIso(it.o,centerX,centerZ,scale);
-    else drawBotIso(centerX,centerZ,scale);
-  }
-  const b=cameraBearing(),origin=worldToScreen(bot.x,bot.z,terrainHeight(bot.x,bot.z),centerX,centerZ,scale);
-  ctx.strokeStyle="rgba(126,220,195,.30)";ctx.lineWidth=1;
-  for(const a of [b-FOV*.5,b,b+FOV*.5]){
-    const p=worldToScreen(bot.x+Math.cos(a)*6,bot.z+Math.sin(a)*6,terrainHeight(bot.x,bot.z),centerX,centerZ,scale);
-    ctx.beginPath();ctx.moveTo(origin.x,origin.y);ctx.lineTo(p.x,p.y);ctx.stroke();
-  }
-}
-function renderBotCam(){
-  const sky=LIGHTS[lightIndex].name==="NIGHT"?"#162132":config.sky;
-  ctx.fillStyle=sky;ctx.fillRect(0,0,canvas.width,canvas.height*.52);
-  ctx.fillStyle=config.ground;ctx.fillRect(0,canvas.height*.52,canvas.width,canvas.height*.48);
-  for(let i=0;i<8;i++){
-    const y=canvas.height*.54+i*36;
-    ctx.strokeStyle="rgba(0,0,0,"+(0.05+i*.012)+")";ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(canvas.width,y);ctx.stroke();
-  }
-  const list=detections.slice().sort((a,b)=>b.dist-a.dist);
-  for(const d of list){
-    const x=canvas.width*.5+Math.tan(d.rel)/Math.tan(FOV*.5)*canvas.width*.5;
-    const size=clamp(260/(d.dist+1),14,180)*(d.o.kind==="gate"?1.7:1);
-    const baseY=canvas.height*.64+130/(d.dist+2)-bot.headPitch*140;
-    let col="#6f6f6f";
-    if(d.o.kind==="parts")col=d.cls.includes("REDSTONE")?"#b52b2b":d.cls.includes("GOLD")?"#d4b13f":d.cls.includes("IRON")?"#c6c6c1":"#ded8ce";
-    else if(d.o.kind==="core")col="#a77b45";
-    else if(d.o.kind==="gate")col="#241c31";
-    else if(d.o.type==="TREE")col="#447c38";
-    else if(d.o.type==="BASALT")col="#39343a";
-    else if(d.o.type==="CHORUS")col="#8e6e96";
-    ctx.fillStyle=col;ctx.fillRect(x-size*.5,baseY-size,size,size);
-    ctx.strokeStyle=d.cls==="?"?"#e7c07b":"#b7eadf";ctx.lineWidth=1.5;ctx.strokeRect(x-size*.58,baseY-size*1.08,size*1.16,size*1.16);
-    ctx.fillStyle="rgba(8,14,10,.72)";ctx.fillRect(x-size*.58,baseY-size*1.08-31,Math.max(82,size*1.16),28);
-    ctx.fillStyle=d.cls==="?"?"#f1d19c":"#c7eee5";ctx.font="700 12px ui-monospace, monospace";ctx.fillText(d.cls,x-size*.53,baseY-size*1.08-17);
-    ctx.font="10px ui-monospace, monospace";ctx.fillText(Math.round(d.confidence*100)+"% · "+d.dist.toFixed(1)+" m",x-size*.53,baseY-size*1.08-6);
-  }
-  ctx.strokeStyle="rgba(183,238,225,.5)";ctx.lineWidth=1;
-  ctx.beginPath();ctx.moveTo(canvas.width*.5-12,canvas.height*.5);ctx.lineTo(canvas.width*.5+12,canvas.height*.5);ctx.moveTo(canvas.width*.5,canvas.height*.5-12);ctx.lineTo(canvas.width*.5,canvas.height*.5+12);ctx.stroke();
-  const target=detections[0];
-  ctx.fillStyle="rgba(7,12,8,.70)";ctx.fillRect(16,canvas.height-60,260,42);
-  ctx.fillStyle="#c7eee5";ctx.font="700 13px ui-monospace, monospace";
-  ctx.fillText(target?"VISUAL LOCK · "+target.cls:"SEARCHING",26,canvas.height-40);
-  ctx.font="10px ui-monospace, monospace";ctx.fillText(target?(Math.round(target.confidence*100)+"% · "+target.dist.toFixed(1)+" m"):"NO VISUAL CONTACT",26,canvas.height-25);
+
+  ctx.fillStyle="rgba(7,9,7,.65)";ctx.fillRect(10,10,178,38);
+  ctx.fillStyle="#f0e6ba";ctx.font="11px ui-monospace,monospace";
+  ctx.fillText("X "+Math.round(bot.x)+"  Y "+Math.round(bot.y),18,25);
+  ctx.fillText("WORLD "+WORLD_SIZE+" × "+WORLD_SIZE,18,41);
+
+  if(TIMES[timeIndex].overlay!=="rgba(0,0,0,0)"){ctx.fillStyle=TIMES[timeIndex].overlay;ctx.fillRect(0,0,canvas.width,canvas.height)}
 }
 
 function render(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  if(viewMode==="botcam")renderBotCam();
-  else renderWorld(viewMode==="follow");
-  if(LIGHTS[lightIndex].shade>0){
-    ctx.fillStyle="rgba(16,18,28,"+LIGHTS[lightIndex].shade+")";ctx.fillRect(0,0,canvas.width,canvas.height);
-  }
+  ctx.imageSmoothingEnabled=false;
+  if(viewMode==="close")renderMap(34,false);
+  else if(viewMode==="sensor")renderMap(22,true);
+  else renderMap(22,false);
 }
-
 function cycleView(){
   if(!running)return;
   viewIndex=(viewIndex+1)%views.length;viewMode=views[viewIndex];
-  const name={world:"WORLD",follow:"FOLLOW",botcam:"BOT CAM"}[viewMode];
-  viewBadge.textContent=name;viewName.textContent=name;
+  const n={world:"WORLD",close:"CLOSE",sensor:"SENSOR"}[viewMode];
+  viewBadge.textContent=n;viewName.textContent=n;
 }
-function setLight(i){lightIndex=i;lightLabel.textContent=LIGHTS[i].name}
-
+function setTime(i){timeIndex=i;lightLabel.textContent=TIMES[i].name}
 function resize(){
-  const rect=canvas.getBoundingClientRect();
-  const w=Math.max(320,Math.round(rect.width||960)),h=Math.round(w*600/960);
-  canvas.width=w;canvas.height=h;
+  const r=canvas.getBoundingClientRect(),w=Math.max(320,Math.round(r.width||960)),h=Math.round(w*600/960);
+  canvas.width=w;canvas.height=h;ctx.imageSmoothingEnabled=false;
 }
-window.addEventListener("resize",resize);
 
 enterButton.addEventListener("click",()=>{running=true;intro.hidden=true;log(life.position?"memory restored":"autonomy enabled");think()});
 pauseButton.addEventListener("click",()=>{if(!running)return;paused=!paused;pauseButton.textContent=paused?"RESUME":"PAUSE"});
 viewButton.addEventListener("click",cycleView);
-lightButton.addEventListener("click",()=>setLight((lightIndex+1)%LIGHTS.length));
+lightButton.addEventListener("click",()=>setTime((timeIndex+1)%TIMES.length));
 newLifeButton.addEventListener("click",()=>{if(confirm("Tiny Bot の性格・記憶・改造をすべて初期化しますか？")){localStorage.removeItem(SAVE_KEY);location.reload()}});
+window.addEventListener("resize",resize);
 window.addEventListener("blur",()=>{if(running&&!paused){paused=true;pauseButton.textContent="RESUME";saveLife()}});
 
-buildWorld();resize();updateMapUI();updateUI();updatePerception();render();
-if(life.position)log("saved life found · dimension "+String(life.mapIndex+1).padStart(2,"0"));
+buildRegion();resize();updatePerception();updateUI();render();
+if(life.position)log("saved journey restored · region "+String(life.regionIndex+1).padStart(2,"0"));
 
 function frame(time){
   const dt=Math.min(.04,Math.max(0,(time-lastTime)/1000||.016));lastTime=time;
   if(running&&!paused){
-    updateBehavior(dt,time);updateHead(dt,time);updatePerception();updateUI();
-    saveTimer+=dt;if(saveTimer>6){saveTimer=0;saveLife()}
-  }else updateHead(dt*.2,time);
-  render();
-  requestAnimationFrame(frame);
+    updateBehavior(dt,time);updatePerception();updateUI();saveTimer+=dt;if(saveTimer>6){saveTimer=0;saveLife()}
+  }
+  render();requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 
