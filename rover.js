@@ -165,7 +165,9 @@ async function boot(){
         mesh=gate;obstacles.push({x:def.x,z:def.z,rad:1.0,zoneId:def.id});
       }
       if(mesh){
-        mesh.position.set(def.x,heightAt(def.x,def.z),def.z);mesh.castShadow=true;mesh.receiveShadow=true;worldGroup.add(mesh);
+        mesh.position.set(def.x,heightAt(def.x,def.z),def.z);
+        if(discovered.has(def.id)&&(def.kind==="parts"||def.kind==="core"))mesh.visible=false;
+        mesh.castShadow=true;mesh.receiveShadow=true;worldGroup.add(mesh);
       }
       zones.push({...def,mesh,discovered:discovered.has(def.id)});
     });
@@ -220,7 +222,7 @@ async function boot(){
   const roverState={
     x:0,z:0,heading:.35,speed:0,targetSpeed:0,battery:clamp(life.battery||100,0,maxBattery()),state:"THINK",timer:1.2,
     targetZone:null,goal:null,navPurpose:null,prevDist:Infinity,stuckTime:0,recoverSign:1,
-    mastYaw:0,armProgress:0,scanProgress:0,yawRate:0,wheelAngleL:0,wheelAngleR:0,upgradeChoice:null
+    mastYaw:0,armProgress:0,armVisual:0,scanProgress:0,yawRate:0,wheelAngleL:0,wheelAngleR:0,upgradeChoice:null
   };
   if(life.position&&life.position.mapIndex===life.mapIndex){roverState.x=life.position.x;roverState.z=life.position.z;roverState.heading=life.position.heading}
   let running=false,paused=false,lastTime=performance.now(),saveTimer=0;
@@ -255,7 +257,7 @@ async function boot(){
   }
 
   function think(){
-    roverState.state="THINK";roverState.timer=.85+rnd(.25,.8);roverState.speed=0;roverState.yawRate=0;decisionBadge.textContent="THINKING…";
+    roverState.state="THINK";roverState.timer=.85+rnd(.25,.8);roverState.speed=0;roverState.yawRate=0;roverState.armProgress=0;decisionBadge.textContent="THINKING…";
   }
 
   function chooseAction(){
@@ -378,11 +380,16 @@ async function boot(){
     saveLife();think();
   }
 
-  function startCharge(){roverState.state="CHARGE";roverState.speed=0;roverState.yawRate=0;life.exp.charges++;log("energy risk high · charging");}
+  function startCharge(){
+    roverState.state="CHARGE";roverState.speed=0;roverState.yawRate=0;roverState.armProgress=0;
+    life.exp.charges++;life.personality.caution=clamp(life.personality.caution+.006,.25,.95);
+    log("energy risk high · charging");saveLife();
+  }
   function startUpgrade(up){roverState.state="UPGRADE";roverState.timer=4.0;roverState.upgradeChoice=up;roverState.armProgress=0;log("self-modification chosen · "+up.label.toLowerCase())}
   function finishUpgrade(){
     const up=roverState.upgradeChoice;if(!up||life.parts<up.cost){think();return}
     life.parts-=up.cost;life.upgrades.push(up.id);roverState.battery=Math.min(maxBattery(),roverState.battery+(up.id==="battery"?35:0));
+    life.personality.improve=clamp(life.personality.improve-.008,.25,.98);
     applyUpgradeVisuals();log("upgrade installed · "+up.label.toLowerCase());saveLife();think();
   }
 
@@ -442,7 +449,8 @@ async function boot(){
     wheels.forEach(w=>{w.rotation.z=w.position.z>0?roverState.wheelAngleL:roverState.wheelAngleR});
     mast.rotation.y=roverState.mastYaw;
     lidarHead.rotation.y=time*.004;
-    const p=roverState.armProgress||0,e=p*p*(3-2*p);armBase.rotation.y=-.35+.42*e;shoulder.rotation.z=-(.18+1.05*e);elbow.rotation.z=.12+1.35*e;wrist.rotation.z=-(.05+.42*e);
+    roverState.armVisual+=(roverState.armProgress-roverState.armVisual)*(1-Math.exp(-dt*4.2));
+    const p=roverState.armVisual||0,e=p*p*(3-2*p);armBase.rotation.y=-.35+.42*e;shoulder.rotation.z=-(.18+1.05*e);elbow.rotation.z=.12+1.35*e;wrist.rotation.z=-(.05+.42*e);
   }
 
   function animateWorld(time){
@@ -470,7 +478,7 @@ async function boot(){
   function updateUI(){
     const [a,b]=activityCopy(),m=mem(),pct=Math.round(exploration()*100);
     stateText.textContent=roverState.state;activityText.textContent=a;detailText.textContent=b;
-    batteryText.textContent="BATTERY "+Math.round(roverState.battery)+"/"+maxBattery()+"%";speedText.textContent="SPEED "+Math.abs(roverState.speed).toFixed(2)+" m/s";
+    batteryText.textContent="BATTERY "+Math.round(roverState.battery/maxBattery()*100)+"%";speedText.textContent="SPEED "+Math.abs(roverState.speed).toFixed(2)+" m/s";
     partsText.textContent="PARTS "+life.parts;sampleText.textContent="SAMPLES "+life.samples;exploreText.textContent="EXPLORED "+pct+"%";
     headingText.textContent="Heading "+Math.round((roverState.heading*180/Math.PI+360)%360)+"°";updateMapUI();
     const P=life.personality;
