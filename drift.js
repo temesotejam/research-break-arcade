@@ -181,7 +181,7 @@
     }
     lastOnRoad = newOnRoad;
 
-    checkCheckpoint();
+    if (newOnRoad) checkCheckpoint();
 
     if (offroadTime > 1.65 || newRadius < 72 || newRadius > 350) {
       respawn();
@@ -213,9 +213,10 @@
   }
 
   function respawn() {
+    const lastCheckpoint = checkpoints[(checkpointIndex + checkpoints.length - 1) % checkpoints.length];
+    car.x = lastCheckpoint.x;
+    car.y = lastCheckpoint.y;
     const theta = Math.atan2(car.y - CY, car.x - CX);
-    car.x = CX + Math.cos(theta) * TRACK_R;
-    car.y = CY + Math.sin(theta) * TRACK_R;
     car.angle = theta - Math.PI / 2;
     car.speed = 130;
     steer = 0;
