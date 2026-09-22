@@ -121,11 +121,18 @@ async function boot(){
   const lens=new THREE.Mesh(new THREE.CylinderGeometry(.045,.045,.045,16),new THREE.MeshStandardMaterial({color:0x0c1115,metalness:.5,roughness:.15}));
   lens.rotation.z=Math.PI/2;lens.position.set(.13,.59,0);mast.add(lens);
 
-  const wheelGeo=new THREE.CylinderGeometry(.18,.18,.12,18);
+  const wheelGeo=new THREE.CylinderGeometry(.18,.18,.12,24);
+  // CylinderGeometry rotates around local Y by default. Bake the axle alignment
+  // into the geometry itself so the wheel mesh can use rotation.z only for rolling.
+  wheelGeo.rotateX(Math.PI/2);
   const wheels=[];
   for(const x of [-.46,0,.46]){
     for(const z of [-.49,.49]){
-      const w=new THREE.Mesh(wheelGeo,darkMat);w.rotation.x=Math.PI/2;w.position.set(x,.18,z);w.castShadow=true;rover.add(w);wheels.push(w);
+      const w=new THREE.Mesh(wheelGeo,darkMat);
+      w.position.set(x,.18,z);
+      w.castShadow=true;
+      rover.add(w);
+      wheels.push(w);
     }
   }
 
@@ -146,7 +153,7 @@ async function boot(){
   const roverState={
     x:0,z:0,heading:.4,speed:0,targetSpeed:0,battery:100,samples:0,
     state:"SURVEY",timer:2.7,target:null,goal:null,prevDist:Infinity,stuckTime:0,recoverSign:1,recoverReturn:"DRIVE",
-    mastYaw:0,armProgress:0,scanProgress:0,distanceTravelled:0
+    mastYaw:0,armProgress:0,scanProgress:0,distanceTravelled:0,wheelAngle:0
   };
   rover.position.set(0,h(0,0)+.32,0);
 
@@ -308,6 +315,8 @@ async function boot(){
         break;
     }
 
+    roverState.wheelAngle-=roverState.speed*dt/.18;
+
     const drain=(Math.abs(roverState.speed)>.08?.34:.08)+(["SCAN","ARM_DEPLOY","SAMPLE","RETRACT"].includes(roverState.state)?.08:0);
     if(roverState.state!=="CHARGE")roverState.battery=Math.max(0,roverState.battery-dt*drain);
   }
@@ -323,8 +332,7 @@ async function boot(){
     rover.position.set(x,h(x,z)+.34,z);
     rover.rotation.order="YXZ";rover.rotation.y=-roverState.heading;rover.rotation.x=pitch;rover.rotation.z=roll;
 
-    const wheelSpin=roverState.distanceTravelled/.18;
-    for(const w of wheels){w.rotation.x=Math.PI/2;w.rotation.z=wheelSpin;}
+    for(const w of wheels)w.rotation.z=roverState.wheelAngle;
 
     mast.rotation.y=roverState.mastYaw;
 
@@ -414,7 +422,7 @@ async function boot(){
 
   function resetSite(){
     roverState.x=0;roverState.z=0;roverState.heading=Math.random()*Math.PI*2;roverState.speed=0;roverState.targetSpeed=0;roverState.battery=100;roverState.samples=0;
-    roverState.target=null;roverState.goal=null;roverState.mastYaw=0;roverState.armProgress=0;roverState.distanceTravelled=0;
+    roverState.target=null;roverState.goal=null;roverState.mastYaw=0;roverState.armProgress=0;roverState.distanceTravelled=0;roverState.wheelAngle=0;
     targets.forEach(t=>{t.visited=false;t.sampled=false});
     logs.length=0;logList.innerHTML="";transition("SURVEY",2.6);log("new site initialized");
   }
