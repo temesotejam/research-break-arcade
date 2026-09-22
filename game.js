@@ -38,6 +38,10 @@
   const LANDER_HALF_H = 18;
   const MAX_VS = 2.25;
   const MAX_HS = 1.35;
+  const MAX_START_OFFSET_PX = 200;
+  const MAX_START_HS = 2.5;
+  const MAIN_FUEL_RATE = 8.0;
+  const LATERAL_FUEL_RATE = 4.0;
   const keys = { left: false, right: false, thrust: false };
   const stars = makeStars(90);
 
@@ -111,12 +115,11 @@
     if (Math.abs(env.wind) < 0.07) env.wind = Math.sign(env.wind || 1) * 0.07;
 
     lander = makeLander();
-    lander.x = Math.max(100, Math.min(W - 100, pad.x + randomBetween(-300, 300)));
-    if (Math.abs(lander.x - pad.x) < 80) {
-      lander.x += lander.x < W / 2 ? -150 : 150;
-      lander.x = Math.max(100, Math.min(W - 100, lander.x));
-    }
-    lander.vx = randomBetween(-5, 5);
+    lander.x = Math.max(
+      100,
+      Math.min(W - 100, pad.x + randomBetween(-MAX_START_OFFSET_PX, MAX_START_OFFSET_PX))
+    );
+    lander.vx = randomBetween(-MAX_START_HS, MAX_START_HS);
     lander.vy = randomBetween(0, 5);
 
     environmentText.textContent =
@@ -173,15 +176,15 @@
     if (lander.fuel > 0) {
       if (keys.thrust) {
         lander.vy -= 4.85 * PX_PER_M * dt;
-        lander.fuel -= 10.5 * dt;
+        lander.fuel -= MAIN_FUEL_RATE * dt;
       }
       if (keys.left) {
         lander.vx -= 2.0 * PX_PER_M * dt;
-        lander.fuel -= 5.5 * dt;
+        lander.fuel -= LATERAL_FUEL_RATE * dt;
       }
       if (keys.right) {
         lander.vx += 2.0 * PX_PER_M * dt;
-        lander.fuel -= 5.5 * dt;
+        lander.fuel -= LATERAL_FUEL_RATE * dt;
       }
     }
 
@@ -224,7 +227,8 @@
     const padLeft = pad.x - pad.width / 2 + LANDER_HALF_W;
     const padRight = pad.x + pad.width / 2 - LANDER_HALF_W;
     const onPad = lander.x >= padLeft && lander.x <= padRight;
-    const vx = Math.abs(lander.vx / PX_PER_M);
+    const vxSigned = lander.vx / PX_PER_M;
+    const vx = Math.abs(vxSigned);
     const vy = Math.abs(lander.vy / PX_PER_M);
     const verticalOk = vy <= MAX_VS;
     const horizontalOk = vx <= MAX_HS;
@@ -250,7 +254,7 @@
       missionText.textContent = "LANDING SUCCESS";
       beep(760, 0.08, 0.04);
       setTimeout(() => beep(980, 0.10, 0.035), 90);
-      showResult(true, score, vx, vy, onPad, verticalOk, horizontalOk);
+      showResult(true, score, vx, vxSigned, vy, onPad, verticalOk, horizontalOk);
     } else {
       state = "result";
       const failed = [];
@@ -259,11 +263,11 @@
       if (!horizontalOk) failed.push("H/S超過");
       missionText.textContent = "FAILED: " + failed.join(" / ");
       beep(150, 0.15, 0.05);
-      showResult(false, 0, vx, vy, onPad, verticalOk, horizontalOk);
+      showResult(false, 0, vx, vxSigned, vy, onPad, verticalOk, horizontalOk);
     }
   }
 
-  function showResult(success, score, vx, vy, onPad, verticalOk, horizontalOk) {
+  function showResult(success, score, vx, vxSigned, vy, onPad, verticalOk, horizontalOk) {
     overlay.hidden = false;
     overlayKicker.textContent = success ? "TOUCHDOWN" : "TRY AGAIN";
     overlayTitle.textContent = success ? "着陸成功。" : "着陸失敗。";
@@ -281,7 +285,7 @@
     resultStats.innerHTML =
       "<div><span>SCORE</span><strong>" + score.toLocaleString("ja-JP") + "</strong></div>" +
       "<div><span>V/S</span><strong>" + vy.toFixed(2) + "</strong></div>" +
-      "<div><span>H/S</span><strong>" + vx.toFixed(2) + "</strong></div>";
+      "<div><span>H/S</span><strong>" + formatHorizontalSpeed(vxSigned) + "</strong></div>";
 
     primaryButton.textContent = remainingSeconds() > 2 ? "もう1回" : "NEW BREAK";
     secondaryButton.hidden = false;
@@ -357,7 +361,8 @@
     const ground = groundYAt(lander.x);
     const altitude = Math.max(0, (ground - (lander.y + LANDER_HALF_H)) / PX_PER_M);
     const vs = Math.abs(lander.vy / PX_PER_M);
-    const hs = Math.abs(lander.vx / PX_PER_M);
+    const signedHs = lander.vx / PX_PER_M;
+    const hs = Math.abs(signedHs);
     const safePadLeft = pad.x - pad.width / 2 + LANDER_HALF_W;
     const safePadRight = pad.x + pad.width / 2 - LANDER_HALF_W;
     const onPad = lander.x >= safePadLeft && lander.x <= safePadRight;
@@ -365,11 +370,16 @@
     fuelValue.textContent = Math.round(lander.fuel);
     altValue.textContent = altitude.toFixed(1);
     vsValue.textContent = vs.toFixed(2);
-    hsValue.textContent = hs.toFixed(2);
+    hsValue.textContent = formatHorizontalSpeed(signedHs);
 
     setRuleState(padRule, onPad);
     setRuleState(vsRule, vs <= MAX_VS);
     setRuleState(hsRule, hs <= MAX_HS);
+  }
+
+  function formatHorizontalSpeed(value) {
+    if (Math.abs(value) < 0.01) return "· 0.00";
+    return (value < 0 ? "← " : "→ ") + Math.abs(value).toFixed(2);
   }
 
   function setRuleState(element, ok) {
