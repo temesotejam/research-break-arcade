@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#17100d">
-  <meta name="description" content="1台の小型探査ローバーが自律行動する Tiny Rover。">
+  <meta name="description" content="自分で探索・改造・次の世界への移動を選ぶ Tiny Rover。">
   <title>Research Break Arcade — Tiny Rover</title>
   <link rel="stylesheet" href="rover.css">
 </head>
@@ -12,7 +12,7 @@
   <main class="app">
     <header class="topbar">
       <div>
-        <p class="eyebrow">RESEARCH BREAK ARCADE · AUTONOMOUS MODE</p>
+        <p class="eyebrow">RESEARCH BREAK ARCADE · AUTONOMOUS LIFE</p>
         <h1>Tiny Rover</h1>
       </div>
       <nav class="top-actions" aria-label="ゲーム切り替え">
@@ -28,37 +28,48 @@
     <section class="rover-card">
       <div class="telemetry">
         <div>
-          <span class="mini-label">AUTONOMOUS EXPLORATION</span>
+          <span class="mini-label">AUTONOMOUS AGENT</span>
           <strong id="stateText">SYSTEM READY</strong>
+          <small id="mapText">MAP 01 · RED BASIN</small>
         </div>
         <div class="telemetry-values">
           <span id="batteryText">BATTERY 100%</span>
           <span id="speedText">SPEED 0.00 m/s</span>
-          <span id="targetText">TARGET —</span>
+          <span id="partsText">PARTS 0</span>
           <span id="sampleText">SAMPLES 0</span>
+          <span id="exploreText">EXPLORED 0%</span>
         </div>
       </div>
 
       <div class="stage-wrap">
-        <canvas id="roverCanvas" width="960" height="600" aria-label="小型探査ローバーが自律的に岩を調査する3Dフィールド"></canvas>
+        <canvas id="roverCanvas" width="960" height="600" aria-label="自律ローバーが探索・自己改造・マップ移動を行う3D世界"></canvas>
         <div id="viewBadge" class="view-badge">OVERVIEW</div>
+        <div id="decisionBadge" class="decision-badge">THINKING…</div>
 
         <div id="intro" class="intro">
           <div class="intro-panel">
-            <p class="intro-kicker">JUST WATCH</p>
-            <h2>1台のローバーが、勝手に仕事をします。</h2>
-            <p>走る、岩を見つける、止まって観察する、近づく、アームで触る、記録する。指示は不要です。何をするかはローバー自身が決めます。</p>
+            <p class="intro-kicker">AUTONOMOUS LIFE</p>
+            <h2>このロボットには、攻略手順を与えていません。</h2>
+            <p>未知を調べる、自分を改造する、謎のアイテムを持ち帰る、ゲートを起動する、次の世界へ進む。候補の中から、その時の経験と性格でロボット自身が決めます。</p>
             <button id="enterButton" class="enter-button" type="button">観察を始める</button>
           </div>
         </div>
       </div>
 
-      <div class="activity">
-        <div>
-          <span class="mini-label">CURRENT ACTIVITY</span>
+      <div class="agent-grid">
+        <div class="activity">
+          <span class="mini-label">CURRENT INTENTION</span>
           <strong id="activityText">待機しています。</strong>
-          <small id="detailText">開始すると周囲をスキャンします。</small>
+          <small id="detailText">開始すると自分で最初の行動を選びます。</small>
         </div>
+
+        <div class="mind">
+          <span class="mini-label">MIND</span>
+          <div class="mind-row"><span>CURIOSITY</span><div><i id="curiosityFill"></i></div><b id="curiosityText">—</b></div>
+          <div class="mind-row"><span>CAUTION</span><div><i id="cautionFill"></i></div><b id="cautionText">—</b></div>
+          <div class="mind-row"><span>SELF-IMPROVE</span><div><i id="improveFill"></i></div><b id="improveText">—</b></div>
+        </div>
+
         <div class="view-status">
           <span>CAMERA</span>
           <strong id="viewName">OVERVIEW</strong>
@@ -66,8 +77,19 @@
         </div>
       </div>
 
+      <div class="upgrade-panel">
+        <div>
+          <span class="mini-label">SELF MODIFICATIONS</span>
+          <div id="upgradeList" class="chips"><span class="empty-chip">stock configuration</span></div>
+        </div>
+        <div>
+          <span class="mini-label">INVENTORY / MEMORY</span>
+          <div id="inventoryList" class="chips"><span class="empty-chip">nothing unusual yet</span></div>
+        </div>
+      </div>
+
       <div class="mission-log">
-        <span class="mini-label">MISSION LOG</span>
+        <span class="mini-label">THOUGHT / MISSION LOG</span>
         <div id="logList" class="log-list" aria-live="polite">
           <span>— waiting for autonomous start —</span>
         </div>
@@ -82,20 +104,20 @@
           <strong>LIGHT</strong>
           <span id="lightLabel">LOW SUN</span>
         </button>
-        <button id="newSiteButton" type="button">
-          <strong>NEW SITE</strong>
-          <span>別の地形で最初から観察</span>
+        <button id="newLifeButton" type="button">
+          <strong>NEW LIFE</strong>
+          <span>性格・記憶・改造をすべて初期化</span>
         </button>
       </div>
 
       <div class="note">
-        <span>動く主体はこのローバー1台だけです。</span>
-        <span>岩・地形は静止した環境です。</span>
+        <span>プレイヤーは改造や進行先を選びません。</span>
+        <span>進行と自己改造はこの端末に保存されます。</span>
       </div>
     </section>
 
     <footer class="footer">
-      <span>次に何をするか分からないこと自体を眺めるモードです。</span>
+      <span>放置して戻ってきた時、前とは違う姿・場所になっていることを目指したモードです。</span>
       <span>Everything runs locally in the browser.</span>
     </footer>
   </main>
