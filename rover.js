@@ -350,8 +350,11 @@ async function boot(){
     let desired=Math.atan2(goal.z-roverState.z,goal.x-roverState.x),avoid=0;
     const look=1.0+Math.abs(roverState.speed)*1.15;
     const fx=roverState.x+Math.cos(roverState.heading)*look,fz=roverState.z+Math.sin(roverState.heading)*look;
+    const seenSet=new Set(mem().seen);
     for(const o of obstacles){
       if(roverState.targetZone&&o.zoneId===roverState.targetZone.id&&roverState.navPurpose==="explore")continue;
+      const bodyDist=Math.hypot(roverState.x-o.x,roverState.z-o.z);
+      if(!seenSet.has(o.zoneId)&&bodyDist>.62)continue;
       const d=Math.hypot(fx-o.x,fz-o.z),rad=o.rad+(has("traction")?.18:.32);
       if(d<rad){
         const away=Math.atan2(fz-o.z,fx-o.x);let diff=wrap(away-roverState.heading);
@@ -462,6 +465,12 @@ async function boot(){
     buildWorld();roverState.battery=Math.min(maxBattery(),roverState.battery+12);applyUpgradeVisuals();log("new world · "+activeConfig.name.toLowerCase());saveLife();think();
   }
 
+  function selfWorkVisible(){
+    const panTarget=THREE.MathUtils.degToRad(-48);
+    return Math.abs(wrap(roverState.mastYaw-panTarget))<THREE.MathUtils.degToRad(22)
+      && roverState.mastPitch<THREE.MathUtils.degToRad(-48);
+  }
+
   function updateBehavior(dt,time){
     if(roverState.state==="THINK"){roverState.timer-=dt;if(roverState.timer<=0)chooseAction()}
     else if(roverState.state==="SEARCH"){
@@ -488,7 +497,11 @@ async function boot(){
       }
       if(roverState.timer<=0)finishContact();
     }else if(roverState.state==="UPGRADE"){
-      roverState.timer-=dt;roverState.armProgress=.55+.35*Math.sin(time*.004)**2;if(roverState.timer<=0)finishUpgrade();
+      if(selfWorkVisible()){
+        roverState.timer-=dt;
+        roverState.armProgress=.55+.35*Math.sin(time*.004)**2;
+      }
+      if(roverState.timer<=0)finishUpgrade();
     }else if(roverState.state==="ACTIVATE_GATE"){
       const canSee=roverState.targetZone&&visibleToCamera(roverState.targetZone);
       if(canSee){
