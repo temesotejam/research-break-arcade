@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#12221c">
+  <meta name="description" content="眺めているだけで楽しめる癒やし系ミニ池 Pocket Pond。">
+  <title>Research Break Arcade — Pocket Pond</title>
+  <link rel="stylesheet" href="pond.css">
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">RESEARCH BREAK ARCADE · QUIET MODE</p>
+        <h1>Pocket Pond</h1>
+      </div>
+      <nav class="top-actions" aria-label="ゲーム切り替え">
+        <a class="nav-button" href="index.html">Lander</a>
+        <a class="nav-button" href="fishing.html">Fishing</a>
+        <a class="nav-button" href="tower.html">Tower</a>
+        <a class="nav-button" href="drift.html">Drift</a>
+        <a class="nav-button" href="orbit.html">Orbit</a>
+        <button id="soundButton" class="nav-button" type="button" aria-pressed="false">SOUND OFF</button>
+        <button id="pauseButton" class="nav-button" type="button" aria-pressed="false">PAUSE</button>
+      </nav>
+    </header>
+
+    <section class="pond-card">
+      <div class="pond-head">
+        <div>
+          <span class="mini-label">NO SCORE · NO TIMER</span>
+          <strong id="dayPhaseText">Late afternoon</strong>
+        </div>
+        <div class="weather">
+          <span id="weatherText">Calm</span>
+          <span id="visitorText">A dragonfly is visiting.</span>
+        </div>
+      </div>
+
+      <div class="pond-wrap">
+        <canvas id="pondCanvas" width="960" height="600" aria-label="魚、カエル、トンボ、ホタルが暮らす小さな池"></canvas>
+
+        <div id="povBadge" class="pov-badge">POND VIEW</div>
+        <div id="messageBubble" class="message-bubble" hidden aria-live="polite"></div>
+
+        <div id="intro" class="intro">
+          <div class="intro-panel">
+            <p class="intro-kicker">JUST WATCH</p>
+            <h2>何もしなくて大丈夫です。</h2>
+            <p>魚は勝手に泳ぎ、カエルは葉を渡り、夕方にはトンボ、夜にはホタルが現れます。VIEWを押すと魚・カエル・トンボの目線へ入れます。</p>
+            <button id="enterButton" class="enter-button" type="button">PONDを眺める</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="pond-status">
+        <div>
+          <span class="mini-label">OBSERVATION</span>
+          <strong id="statusText">水面が静かです。</strong>
+          <small id="hintText">しばらく見ていると、誰かが何かを始めます。</small>
+        </div>
+        <div class="day-meter" aria-label="一日の進行">
+          <span>DAY</span>
+          <div class="day-track"><div id="dayFill" class="day-fill"></div></div>
+          <span>NIGHT</span>
+        </div>
+      </div>
+
+      <div class="pond-actions">
+        <button id="viewButton" type="button">
+          <strong>VIEW</strong>
+          <span id="viewLabel">POND → FISH → FROG → DRAGONFLY</span>
+        </button>
+        <button id="feedButton" type="button">
+          <strong>FEED</strong>
+          <span>餌を少しまく</span>
+        </button>
+        <button id="rainButton" type="button">
+          <strong>RAIN</strong>
+          <span>しばらく雨を降らせる</span>
+        </button>
+        <button id="duskButton" type="button">
+          <strong>DUSK</strong>
+          <span>夕暮れまで進める</span>
+        </button>
+      </div>
+
+      <div class="pond-note">
+        <span>水面をクリック / タップすると波紋が広がり、近くの魚が寄ってきます。</span>
+        <span>目的はありません。好きな目線で眺めるだけです。</span>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span>飽きたらそのまま閉じてOKです。</span>
+      <span>Everything runs locally in the browser.</span>
+    </footer>
+  </main>
+
+  <script src="pond.js"></script>
+</body>
+</html>
