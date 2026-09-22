@@ -161,6 +161,7 @@ async function boot(){
         l.position.set(0,1.1,-.92);rr.position.set(0,1.1,.92);top.position.set(0,2.1,0);gate.add(l,rr,top);
         const portalMat=new THREE.MeshBasicMaterial({color:0x7ad7c9,transparent:true,opacity:.42,side:THREE.DoubleSide,depthWrite:false});
         const portal=new THREE.Mesh(new THREE.CircleGeometry(.83,48),portalMat);portal.position.y=1.1;portal.rotation.y=Math.PI/2;portal.visible=mem().gateActivated;gate.add(portal);
+        gate.visible=discovered.has(def.id)||mem().gateActivated;
         gateVisual={group:gate,portal,mat:portalMat};
         mesh=gate;obstacles.push({x:def.x,z:def.z,rad:1.0,zoneId:def.id});
       }
@@ -347,9 +348,11 @@ async function boot(){
     log("local scan · "+z.id);
   }
   function resolveZone(){
-    const z=roverState.targetZone,m=mem();if(!m.discovered.includes(z.id))m.discovered.push(z.id);z.discovered=true;
+    const z=roverState.targetZone,m=mem();
     if(z.kind==="gate"){
-      m.gateKnown=true;log("memory: dormant gateway found");activityText.textContent="使い方の分からない構造物を記憶しました。";saveLife();think();return;
+      if(!m.discovered.includes(z.id))m.discovered.push(z.id);z.discovered=true;m.gateKnown=true;
+      if(z.mesh)z.mesh.visible=true;
+      log("memory: dormant gateway found");activityText.textContent="使い方の分からない構造物を記憶しました。";saveLife();think();return;
     }
     if(z.kind==="core"){
       roverState.state="PICKUP";roverState.timer=has("arm")?1.25:2.35;roverState.armProgress=0;log("unknown device detected");return;
@@ -357,6 +360,7 @@ async function boot(){
     if(z.kind==="parts"){
       roverState.state="PICKUP";roverState.timer=has("arm")?1.15:2.1;roverState.armProgress=0;log("usable hardware detected");return;
     }
+    if(!m.discovered.includes(z.id))m.discovered.push(z.id);z.discovered=true;
     const contactScore=(z.interest||.5)*(.55+life.personality.curiosity*.65)+(life.parts<2?.16:0);
     if(contactScore>.72){
       roverState.state="CONTACT";roverState.timer=has("arm")?1.35:2.25;roverState.armProgress=0;log("surface contact selected");life.exp.contacts++;
@@ -367,6 +371,7 @@ async function boot(){
 
   function finishPickup(){
     const z=roverState.targetZone,m=mem();
+    if(!m.discovered.includes(z.id))m.discovered.push(z.id);z.discovered=true;
     if(z.kind==="core"){
       m.coreHeld=true;if(z.mesh)z.mesh.visible=false;log("inventory + "+activeConfig.core.toLowerCase());
     }else{
