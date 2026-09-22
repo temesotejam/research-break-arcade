@@ -258,6 +258,66 @@ canvas {
 
 #missionText { color: var(--text); }
 
+.landing-rules {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--line);
+  background: rgba(7, 17, 30, .92);
+}
+
+.landing-rule {
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255,255,255,.025);
+  transition: border-color .15s ease, background .15s ease;
+}
+
+.landing-rule .rule-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--danger);
+  box-shadow: 0 0 0 3px rgba(255,155,155,.08);
+  vertical-align: 1px;
+}
+
+.landing-rule strong {
+  font-size: 12px;
+  letter-spacing: .02em;
+}
+
+.landing-rule small {
+  display: block;
+  margin: 3px 0 0 15px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.landing-rule.ok {
+  border-color: rgba(167,243,208,.38);
+  background: rgba(78, 170, 128, .09);
+}
+
+.landing-rule.ok .rule-dot {
+  background: var(--accent-2);
+  box-shadow: 0 0 0 3px rgba(167,243,208,.08);
+}
+
+.landing-rules > p {
+  margin: 0;
+  max-width: 150px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
 .touch-controls {
   display: grid;
   grid-template-columns: 1fr 1.3fr 1fr;
@@ -324,6 +384,10 @@ canvas {
   .hud-item strong { font-size: 17px; }
   .hud-item small { display: none; }
   .mission-strip { align-items: flex-start; flex-direction: column; gap: 3px; padding: 9px 12px; }
+  .landing-rules { grid-template-columns: 1fr; gap: 6px; padding: 8px 9px; }
+  .landing-rule { padding: 7px 9px; }
+  .landing-rule small { display: inline; margin-left: 6px; }
+  .landing-rules > p { max-width: none; padding: 1px 3px 2px; }
   .overlay { padding: 12px; }
   .overlay-panel { padding: 20px 14px; }
   .result-stats { gap: 5px; }
