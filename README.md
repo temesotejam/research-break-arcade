@@ -72,44 +72,38 @@
 
 公開ページ: `orbit.html`
 
-## Autonomous Mode — Tiny Bot / Minecraft World
+## Autonomous Mode — Tiny Bot / Vast Retro RPG World
 
-Minecraft風のブロック世界で、1体の人型自律ロボットを観察する永続型シミュレーションです。WebGL / Three.js は使わず、標準の HTML Canvas 2D だけで描画します。通常のMinecraftらしい探索・採掘・ポータル進行に、ロボット自身の非戦闘アップグレード要素だけを追加しています。
+昔のコンソールRPGのような真上視点のタイルフィールドを、1体の自律ロボットが旅する永続型シミュレーションです。既存ゲームの画像やマップは使わず、標準の HTML Canvas 2D だけで独自に描画します。
 
-- ロボット本体は頭・胴体・両腕・両脚を持つMinecraft風のブロック人型
-- 移動中は腕と脚を振って歩き、頭そのものがパン / チルトするカメラ
-- 最大目標は **SELF EVOLUTION** と **REACH NEXT DIMENSION** の2つだけ
-- 測量そのものはMISSIONにせず、移動・観察・採掘は2つの最大目標を進めるための下位行動
-- OVERWORLD PLAINS → NETHER WASTES → THE END → 以降もMinecraft風チャンクを継続生成
-- 約64 m角のブロック世界を HTML Canvas 2D だけで軽量描画
-- IRON / REDSTONE / QUARTZ / GOLD などを認識・採掘して材料として回収
-- カメラに映った物だけを新規認識し、未発見物の座標を意思決定には使用しない
-- 頭部方向・視野角・距離・見かけサイズ・2D遮蔽判定から認識信頼度を算出
-- BOT CAMでは検出枠、分類名、認識信頼度、距離を表示。十分に分からない物体は `?`
-- 調査後は STONE / IRON ORE / REDSTONE ORE / FLINT & STEEL / NETHER PORTAL などMinecraft側の分類名へ更新
-- ポータルフレームと起動アイテムを探し、発見 → 回収 → 起動 → 通過まで自律実行
+- 論理ワールドは **2048 × 2048 タイル**
+- 全マップを保持・描画せず、現在地周辺の30〜50タイルだけを描画
+- 座標から地形をオンデマンド生成するため、広大でも軽量
+- 草原 / 森 / 山 / 水 / 砂地 / 雪原などをレトロRPG風の簡素なタイルで表現
+- WORLD / CLOSE / SENSOR の3表示
+- 小さい人型キャラクターを画面中央付近に表示
+- 最大目標は **SELF EVOLUTION** と **REACH NEXT REGION** の2つだけ
+- 移動・探索・回収・遺跡調査は、2つの最大目標を進めるための下位行動
+- 古代の門は開始地点からおよそ430〜620タイル離れた場所に生成
+- 門を開くキー遺物はおよそ180〜360タイル圏に生成
+- 部品箱や遺跡も数百タイルにわたって広く散在
+- ロボットは未発見地点の座標を意思決定に使用せず、視界に入ったものだけを記憶
+- 山は視線を遮り、森が多く挟まると認識信頼度が下がる
+- SENSOR表示では現在認識している地点と信頼度を表示
+- 地域移動後は GREEN KINGDOM / SUNLAND / SNOW MARCH / DARKWOOD 系の別フィールドへ進行
 
 ### Self upgrades
 
-戦闘用の攻撃力 / 防御力アップはありません。代わりにロボット自身の探索能力が変化します。
+攻撃力・防御力アップはありません。探索・移動能力だけが成長します。
 
 - **MOVEMENT MODULE** — 移動速度 ×1.48
-- **MINING MODULE** — 採掘・回収速度 ×1.85
-- **LONG-RANGE OPTICS** — 視認距離 ×1.65
-- **DETECTION ARRAY** — 認識信頼度 +14%、小さい物体も検出しやすくなる
-- **FAST ANALYZER** — 未知物体の解析速度 ×1.75
+- **TOOL MODULE** — 回収速度 ×1.85
+- **LONG-RANGE OPTICS** — 視認距離を約13.5 → 22タイルへ拡大
+- **DETECTION ARRAY** — 認識信頼度 +14%
+- **FAST ANALYZER** — 調査速度 ×1.75
 - **POWER EFFICIENCY** — エネルギー消費 ×0.63
 
-アップグレードはロボット自身が現在不足している能力を評価して選び、外見にも反映されます。
-
-- MOVEMENT MODULE → 脚部モジュール
-- MINING MODULE → 右手の採掘ツール
-- LONG-RANGE OPTICS → 顔面バイザー
-- DETECTION ARRAY → 頭部アンテナ
-- FAST ANALYZER → 頭部解析モジュール
-- POWER EFFICIENCY → 胸部発光コア
-
-MISSION、性格、材料、アップグレード、ディメンション、現在位置は Local Storage に保存されます。NEW LIFE でのみ完全初期化します。
+MISSION、性格、部品、アップグレード、地域、現在座標は Local Storage に保存されます。NEW LIFE でのみ完全初期化します。
 
 公開ページ: `rover.html`
 
@@ -146,7 +140,7 @@ MISSION、性格、材料、アップグレード、ディメンション、現�
 - `orbit.html` — Orbit Sling UI
 - `orbit.css` — Orbit Sling デザイン
 - `orbit.js` — Orbit Sling ゲームロジック / Canvas描画
-- `rover.html` — Tiny Rover UI
-- `rover.css` — Tiny Rover デザイン
-- `rover.js` — Pure Canvas 2D / MISSION / 人型アニメーション / 非戦闘アップグレード / ポータル進行 / 視覚認識
-- `pond.html` — Tiny Rover への互換リダイレクト
+- `rover.html` — Tiny Bot UI
+- `rover.css` — Tiny Bot / レトロRPG表示デザイン
+- `rover.js` — Pure Canvas 2D / 2048×2048 procedural world / MISSION / 自己アップグレード / 地域進行 / 視覚認識
+- `pond.html` — Tiny Bot への互換リダイレクト
