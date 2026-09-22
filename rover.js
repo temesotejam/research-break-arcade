@@ -11,7 +11,7 @@ async function boot(){
   const activityText=$("activityText"),detailText=$("detailText"),batteryText=$("batteryText"),speedText=$("speedText");
   const partsText=$("partsText"),sampleText=$("sampleText"),exploreText=$("exploreText"),headingText=$("headingText");
   const lightLabel=$("lightLabel"),logList=$("logList"),upgradeList=$("upgradeList"),inventoryList=$("inventoryList");
-  const scopeOverlay=$("scopeOverlay"),scopeReticle=$("scopeReticle"),scopeTarget=$("scopeTarget"),scopeDistance=$("scopeDistance");
+  const scopeOverlay=$("scopeOverlay"),scopeDetections=$("scopeDetections"),scopeReticle=$("scopeReticle"),scopeTarget=$("scopeTarget"),scopeDistance=$("scopeDistance");
   const curiosityFill=$("curiosityFill"),cautionFill=$("cautionFill"),improveFill=$("improveFill");
   const curiosityText=$("curiosityText"),cautionText=$("cautionText"),improveText=$("improveText");
 
@@ -64,15 +64,22 @@ async function boot(){
     }
   ];
 
+  const MAP_SCALE=3.05;
   function configFor(index){
     const base=MAP_TEMPLATES[index%MAP_TEMPLATES.length];
-    if(index<MAP_TEMPLATES.length)return structuredClone(base);
-    const cycle=Math.floor(index/MAP_TEMPLATES.length);
     const c=structuredClone(base);
-    c.name="FRONTIER "+String(index+1).padStart(2,"0");
-    c.seed+=cycle*2.73;c.rough=clamp(c.rough+cycle*.025,.35,.78);
-    c.core="FRONTIER CORE "+String(index+1).padStart(2,"0");
-    c.zones.forEach((z,i)=>{z.id="X"+(index+1)+"-"+(i+1);z.x+=Math.sin(index*1.4+i)*.45;z.z+=Math.cos(index*.9+i)*.4;if(z.kind==="core")z.label=c.core.toLowerCase()});
+    if(index>=MAP_TEMPLATES.length){
+      const cycle=Math.floor(index/MAP_TEMPLATES.length);
+      c.name="FRONTIER "+String(index+1).padStart(2,"0");
+      c.seed+=cycle*2.73;c.rough=clamp(c.rough+cycle*.025,.35,.78);
+      c.core="FRONTIER CORE "+String(index+1).padStart(2,"0");
+      c.zones.forEach((z,i)=>{
+        z.id="X"+(index+1)+"-"+(i+1);
+        z.x+=Math.sin(index*1.4+i)*.45;z.z+=Math.cos(index*.9+i)*.4;
+        if(z.kind==="core")z.label=c.core.toLowerCase();
+      });
+    }
+    c.zones.forEach(z=>{z.x*=MAP_SCALE;z.z*=MAP_SCALE});
     return c;
   }
 
@@ -100,8 +107,10 @@ async function boot(){
   }
   function mem(){
     const k=String(life.mapIndex);
-    if(!life.maps[k])life.maps[k]={seen:[],discovered:[],gateKnown:false,gateActivated:false,coreHeld:false,visitedCells:[]};
+    if(!life.maps[k])life.maps[k]={seen:[],discovered:[],recognized:{},gateKnown:false,gateActivated:false,coreHeld:false,visitedCells:[],coverageVersion:2};
     if(!Array.isArray(life.maps[k].seen))life.maps[k].seen=[...life.maps[k].discovered];
+    if(!life.maps[k].recognized||typeof life.maps[k].recognized!=="object")life.maps[k].recognized={};
+    if(life.maps[k].coverageVersion!==2){life.maps[k].visitedCells=[];life.maps[k].coverageVersion=2;}
     if(!Array.isArray(life.maps[k].visitedCells))life.maps[k].visitedCells=[];
     return life.maps[k];
   }
@@ -114,12 +123,12 @@ async function boot(){
   const camera=new THREE.PerspectiveCamera(47,16/10,.05,90),camDesired=new THREE.Vector3(),camTarget=new THREE.Vector3();
   const hemi=new THREE.HemisphereLight(0xffd4ae,0x302621,1.45);scene.add(hemi);
   const sun=new THREE.DirectionalLight(0xffd9a0,2.5);sun.position.set(-8,11,4);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);
-  sun.shadow.camera.left=-13;sun.shadow.camera.right=13;sun.shadow.camera.top=13;sun.shadow.camera.bottom=-13;scene.add(sun);
+  sun.shadow.camera.left=-12;sun.shadow.camera.right=12;sun.shadow.camera.top=12;sun.shadow.camera.bottom=-12;scene.add(sun);scene.add(sun.target);
   const lightPresets=[{name:"LOW SUN",mul:1,bg:.0},{name:"HIGH SUN",mul:.88,bg:.08},{name:"DUSTY",mul:.52,bg:-.06}];
   let lightIndex=0;
 
   let activeConfig=configFor(life.mapIndex),worldGroup=null,zones=[],obstacles=[],gateVisual=null,terrainSeed=activeConfig.seed;
-  const WORLD=20;
+  const WORLD=64;
   function heightAt(x,z){
     const r=activeConfig.rough;
     return r*(.24*Math.sin(x*.48+terrainSeed)+.17*Math.cos(z*.66-terrainSeed*.4)+.10*Math.sin(x*.91+z*.59)+.05*Math.cos(x*1.75-z*.45));
@@ -135,15 +144,15 @@ async function boot(){
     activeConfig=configFor(life.mapIndex);terrainSeed=activeConfig.seed;worldGroup=new THREE.Group();scene.add(worldGroup);zones=[];obstacles=[];gateVisual=null;
     scene.background=new THREE.Color(activeConfig.theme.bg);scene.fog.color.setHex(activeConfig.theme.fog);
 
-    const g=new THREE.PlaneGeometry(WORLD,WORLD,96,96);g.rotateX(-Math.PI/2);const a=g.attributes.position;
+    const g=new THREE.PlaneGeometry(WORLD,WORLD,128,128);g.rotateX(-Math.PI/2);const a=g.attributes.position;
     for(let i=0;i<a.count;i++)a.setY(i,heightAt(a.getX(i),a.getZ(i)));a.needsUpdate=true;g.computeVertexNormals();
     const ground=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:activeConfig.theme.ground,roughness:.98}));ground.receiveShadow=true;worldGroup.add(ground);
 
     const pebMat=new THREE.MeshStandardMaterial({color:activeConfig.theme.rock,roughness:1});
-    for(let i=0;i<52;i++){
-      const rr=.04+.07*((i*17+life.mapIndex*11)%11)/11;
+    for(let i=0;i<150;i++){
+      const rr=.04+.08*((i*17+life.mapIndex*11)%11)/11;
       const m=new THREE.Mesh(new THREE.IcosahedronGeometry(1,1),pebMat);
-      const x=-8.7+((i*37+life.mapIndex*13)%101)/101*17.4,z=-8.7+((i*61+life.mapIndex*19)%103)/103*17.4;
+      const x=-29+((i*37+life.mapIndex*13)%101)/101*58,z=-29+((i*61+life.mapIndex*19)%103)/103*58;
       m.position.set(x,heightAt(x,z)+rr*.3,z);m.scale.set(rr*1.7,rr*.58,rr*1.35);m.rotation.set(i*.17,i*.37,i*.09);worldGroup.add(m);
     }
 
@@ -249,7 +258,7 @@ async function boot(){
     return zones.filter(z=>!seen.has(z.id));
   }
 
-  const CELL=2.5;
+  const CELL=5.0;
   function cellKey(x,z){return Math.round(x/CELL)+","+Math.round(z/CELL)}
   function markVisitedCell(){
     const m=mem(),k=cellKey(roverState.x,roverState.z);
@@ -257,13 +266,15 @@ async function boot(){
   }
   function chooseFrontierGoal(){
     const m=mem(),visited=new Set(m.visitedCells),candidates=[];
-    for(let gx=-3;gx<=3;gx++){
-      for(let gz=-3;gz<=3;gz++){
+    const desiredStep=8.5+life.personality.curiosity*5.0;
+    for(let gx=-5;gx<=5;gx++){
+      for(let gz=-5;gz<=5;gz++){
         const x=gx*CELL,z=gz*CELL,k=gx+","+gz;
         if(visited.has(k))continue;
         const d=Math.hypot(x-roverState.x,z-roverState.z);
-        const edge=Math.max(Math.abs(x),Math.abs(z))/7.5;
-        const score=d*.65+life.personality.curiosity*2.2+edge*.5+Math.random()*1.8;
+        if(d<3.5)continue;
+        const edge=Math.max(Math.abs(x),Math.abs(z))/25;
+        const score=-Math.abs(d-desiredStep)*.55+edge*.45+Math.random()*2.2;
         candidates.push({x,z,k,score});
       }
     }
@@ -407,8 +418,21 @@ async function boot(){
     roverState.state="SCAN";roverState.targetZone=z;roverState.timer=has("lidar")?1.25:2.55;roverState.scanProgress=0;roverState.mastYaw=0;life.exp.scans++;
     log("local scan · "+z.id);
   }
+  function recognitionLabel(z){
+    const known=mem().recognized[z.id];
+    if(known)return known;
+    return z.kind==="geology"?"ROCK":"?";
+  }
+  function identifyZone(z){
+    const m=mem();
+    if(z.kind==="geology")m.recognized[z.id]="ROCK";
+    else if(z.kind==="parts")m.recognized[z.id]="SALVAGE";
+    else if(z.kind==="core")m.recognized[z.id]="ARTIFACT";
+    else if(z.kind==="gate")m.recognized[z.id]="STRUCTURE";
+  }
+
   function resolveZone(){
-    const z=roverState.targetZone,m=mem();
+    const z=roverState.targetZone,m=mem();identifyZone(z);
     if(z.kind==="gate"){
       if(!m.discovered.includes(z.id))m.discovered.push(z.id);z.discovered=true;m.gateKnown=true;
       if(z.mesh)z.mesh.visible=true;
@@ -534,7 +558,7 @@ async function boot(){
 
   const PAN_MAX=THREE.MathUtils.degToRad(95),TILT_UP=THREE.MathUtils.degToRad(28),TILT_DOWN=THREE.MathUtils.degToRad(-72);
   const CAMERA_VFOV=THREE.MathUtils.degToRad(46);
-  let perceptionTimer=0,attentionZone=null;
+  let perceptionTimer=0,attentionZone=null,visibleZonesCache=[];
 
   function aimAnglesAt(zone){
     const dx=zone.x-roverState.x,dz=zone.z-roverState.z;
@@ -604,7 +628,7 @@ async function boot(){
     const pose=cameraPose();
     const target=new THREE.Vector3(zone.x,heightAt(zone.x,zone.z)+(zone.kind==="gate"?1.0:.30),zone.z);
     const v=target.clone().sub(pose.origin),dist=v.length();
-    const maxRange=has("lidar")?9.2:7.0;
+    const maxRange=has("lidar")?18.0:11.5;
     if(dist>.15&&dist>maxRange)return false;
     const f=v.dot(pose.forward),side=v.dot(pose.right),vertical=v.dot(pose.up);
     if(f<=.08)return false;
@@ -654,6 +678,7 @@ async function boot(){
       }
     }
     visible.sort((a,b)=>attentionScore(a)-attentionScore(b));
+    visibleZonesCache=visible;
     attentionZone=visible[0]||null;
   }
 
@@ -661,7 +686,9 @@ async function boot(){
     const x=roverState.x,z=roverState.z,fwd={x:Math.cos(roverState.heading),z:Math.sin(roverState.heading)},side={x:-fwd.z,z:fwd.x};
     const front=heightAt(x+fwd.x*.5,z+fwd.z*.5),back=heightAt(x-fwd.x*.5,z-fwd.z*.5),left=heightAt(x+side.x*.42,z+side.z*.42),right=heightAt(x-side.x*.42,z-side.z*.42);
     const suspensionFactor=has("suspension")?.55:1;
-    rover.position.set(x,heightAt(x,z)+.34+(has("suspension")?.035:0),z);
+    const contactClearance=has("traction")?.04:.008;
+    rover.position.set(x,heightAt(x,z)+contactClearance,z);
+    sun.position.set(x-8,11,z+4);sun.target.position.set(x,heightAt(x,z),z);sun.target.updateMatrixWorld();
     rover.rotation.order="YXZ";rover.rotation.y=-roverState.heading;rover.rotation.x=Math.atan2(front-back,1)*suspensionFactor;rover.rotation.z=Math.atan2(right-left,.84)*suspensionFactor;
     wheels.forEach(w=>{w.rotation.z=w.position.z>0?roverState.wheelAngleL:roverState.wheelAngleR});
     mast.rotation.y=roverState.mastYaw;
@@ -728,7 +755,7 @@ async function boot(){
     }
 
     camera.up.set(0,1,0);
-    if(viewMode==="overview"){camDesired.set(7.5,10.5,10.2);camTarget.set(0,0,0)}
+    if(viewMode==="overview"){camDesired.set(roverState.x+11.5,15.5,roverState.z+14.0);camTarget.set(roverState.x,baseY,roverState.z)}
     else if(viewMode==="follow"){camDesired.set(roverState.x-dir.x*3.3+side.x*.95,baseY+2.15,roverState.z-dir.z*3.3+side.z*.95);camTarget.set(roverState.x+dir.x*.9,baseY+.45,roverState.z+dir.z*.9)}
     else{const tip=new THREE.Vector3(.12,0,0);wrist.localToWorld(tip);camDesired.copy(tip).add(new THREE.Vector3(0,.08,0));if(roverState.targetZone)camTarget.set(roverState.targetZone.x,heightAt(roverState.targetZone.x,roverState.targetZone.z)+.35,roverState.targetZone.z);else camTarget.copy(tip).add(dir)}
     const k=viewMode==="overview"?2.3:(viewMode==="follow"?4.2:8.0);
@@ -740,7 +767,21 @@ async function boot(){
   function updateScope(){
     const active=viewMode==="rovercam";
     scopeOverlay.hidden=!active;
-    if(!active)return;
+    if(!active){scopeDetections.innerHTML="";return;}
+
+    const poseForHud=cameraPose();
+    const detections=[];
+    for(const obj of visibleZonesCache){
+      if(obj.mesh&&obj.mesh.visible===false)continue;
+      if(!visibleToCamera(obj))continue;
+      const pt=new THREE.Vector3(obj.x,heightAt(obj.x,obj.z)+(obj.kind==="gate"?1.0:.30),obj.z);
+      const ndc=pt.clone().project(camera);
+      if(ndc.z<-1||ndc.z>1||Math.abs(ndc.x)>1||Math.abs(ndc.y)>1)continue;
+      const px=(ndc.x*.5+.5)*100,py=(-ndc.y*.5+.5)*100,dist=pt.distanceTo(poseForHud.origin);
+      const cls=recognitionLabel(obj),unknown=cls==="?";
+      detections.push('<div class="detection-box" style="left:'+px.toFixed(2)+'%;top:'+py.toFixed(2)+'%"><div class="detection-label '+(unknown?'unknown':'')+'">'+cls+'<small>'+obj.id+' · '+dist.toFixed(1)+' m</small></div></div>');
+    }
+    scopeDetections.innerHTML=detections.join("");
 
     let z=null;
     if(roverState.targetZone&&visibleToCamera(roverState.targetZone)&&(!roverState.targetZone.mesh||roverState.targetZone.mesh.visible!==false))z=roverState.targetZone;
@@ -761,8 +802,9 @@ async function boot(){
     const pose=cameraPose(),dist=target.distanceTo(pose.origin);
     scopeReticle.classList.remove("searching");scopeReticle.classList.add("locked");
     scopeReticle.style.left=px+"%";scopeReticle.style.top=py+"%";
-    scopeTarget.textContent="VISUAL LOCK · "+z.id;
-    scopeDistance.textContent=z.label.toUpperCase()+" · "+dist.toFixed(1)+" m";
+    const cls=recognitionLabel(z);
+    scopeTarget.textContent="VISUAL LOCK · "+cls;
+    scopeDistance.textContent=z.id+" · "+dist.toFixed(1)+" m";
   }
 
   function setLight(i){
@@ -781,7 +823,7 @@ async function boot(){
   newLifeButton.addEventListener("click",()=>{if(confirm("Tiny Rover の性格・記憶・改造をすべて初期化しますか？")){try{localStorage.removeItem(SAVE_KEY)}catch(_){}location.reload()}});
   window.addEventListener("blur",()=>{if(running&&!paused){paused=true;pauseButton.textContent="RESUME";pauseButton.setAttribute("aria-pressed","true");saveLife()}});
 
-  buildWorld();applyUpgradeVisualsAndBattery();rover.position.set(roverState.x,heightAt(roverState.x,roverState.z)+.34,roverState.z);updatePose(.016,0);updateUI();updateCamera(.016);
+  buildWorld();applyUpgradeVisualsAndBattery();rover.position.set(roverState.x,heightAt(roverState.x,roverState.z)+(has("traction")?.04:.008),roverState.z);updatePose(.016,0);updateUI();updateCamera(.016);
   if(life.position)log("saved life found · map "+String(life.mapIndex+1).padStart(2,"0"));
 
   function animate(time){
