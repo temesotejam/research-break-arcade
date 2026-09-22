@@ -5,48 +5,48 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0b0c10">
   <meta name="description" content="2つの勢力が簡易AIで争い、戦況に応じて方針を変えるドット描画シミュレーション。">
-  <title>Research Break Arcade — Two Factions</title>
+  <title>Research Break Arcade — 二勢力シミュレーション</title>
   <link rel="stylesheet" href="factions-v2.css">
 </head>
 <body>
 <main class="app">
   <header class="topbar">
     <div>
-      <p class="eyebrow">AUTONOMOUS CONFLICT SIMULATION</p>
-      <h1>Two Factions</h1>
+      <p class="eyebrow">自律型 二勢力シミュレーション</p>
+      <h1>二勢力シミュレーション</h1>
     </div>
     <nav class="top-actions" aria-label="ゲーム切り替え">
-      <a class="nav-button" href="index.html">Lander</a>
-      <a class="nav-button" href="fishing.html">Fishing</a>
-      <a class="nav-button" href="tower.html">Tower</a>
-      <a class="nav-button" href="drift.html">Drift</a>
-      <a class="nav-button" href="orbit.html">Orbit</a>
+      <a class="nav-button" href="index.html">着陸</a>
+      <a class="nav-button" href="fishing.html">釣り</a>
+      <a class="nav-button" href="tower.html">タワー</a>
+      <a class="nav-button" href="drift.html">ドリフト</a>
+      <a class="nav-button" href="orbit.html">軌道</a>
       <a class="nav-button" href="rover.html">Tiny Bot</a>
     </nav>
   </header>
 
   <section class="sim-card">
     <div class="hud">
-      <div><span>TIME</span><strong id="timeText">00:00</strong></div>
-      <div><span>CONTROL</span><strong id="controlText">50 / 50</strong></div>
-      <div><span>UNITS</span><strong id="unitsText">—</strong></div>
-      <div><span>STATUS</span><strong id="statusText">READY</strong></div>
+      <div><span>経過時間</span><strong id="timeText">00:00</strong></div>
+      <div><span>拠点支配</span><strong id="controlText">50 / 50</strong></div>
+      <div><span>ユニット数</span><strong id="unitsText">—</strong></div>
+      <div><span>状態</span><strong id="statusText">準備中</strong></div>
     </div>
 
     <div class="stage-wrap">
       <canvas id="simCanvas" width="960" height="600" aria-label="2勢力の自律戦闘シミュレーション"></canvas>
-      <div class="legend"><span class="dot ember"></span>EMBER <span class="dot azure"></span>AZURE <span class="node-dot"></span>CONTROL NODE</div>
+      <div class="legend"><span class="dot ember"></span>EMBER（エンバー） <span class="dot azure"></span>AZURE（アズール） <span class="node-dot"></span>支配拠点</div>
     </div>
 
     <div class="faction-grid">
       <section class="faction-card ember-card">
         <div class="faction-head">
-          <div><span class="mini-label">FACTION A</span><h2>EMBER</h2></div>
+          <div><span class="mini-label">勢力A</span><h2>EMBER <small>エンバー</small></h2></div>
           <strong id="emberDoctrine">—</strong>
         </div>
         <div class="trait-grid" id="emberTraits"></div>
         <div class="ai-thought">
-          <span class="mini-label">CURRENT AI THOUGHT</span>
+          <span class="mini-label">現在のAI判断</span>
           <strong id="emberThought">待機中</strong>
           <small id="emberMemory">適応履歴なし</small>
         </div>
@@ -54,12 +54,12 @@
 
       <section class="faction-card azure-card">
         <div class="faction-head">
-          <div><span class="mini-label">FACTION B</span><h2>AZURE</h2></div>
+          <div><span class="mini-label">勢力B</span><h2>AZURE <small>アズール</small></h2></div>
           <strong id="azureDoctrine">—</strong>
         </div>
         <div class="trait-grid" id="azureTraits"></div>
         <div class="ai-thought">
-          <span class="mini-label">CURRENT AI THOUGHT</span>
+          <span class="mini-label">現在のAI判断</span>
           <strong id="azureThought">待機中</strong>
           <small id="azureMemory">適応履歴なし</small>
         </div>
@@ -68,28 +68,28 @@
 
     <div class="bottom-grid">
       <section>
-        <span class="mini-label">BATTLE LOG</span>
-        <div id="battleLog" class="log-list"><span>— simulation not started —</span></div>
+        <span class="mini-label">戦況ログ</span>
+        <div id="battleLog" class="log-list"><span>— シミュレーション開始 —</span></div>
       </section>
       <section>
-        <span class="mini-label">WHAT THE AI CAN DO</span>
+        <span class="mini-label">AIが選べる方針</span>
         <div class="doctrine-list">
-          <span>ATTACK</span><span>DEFEND</span><span>EXPAND</span><span>RAID</span><span>REGROUP</span>
+          <span>攻勢</span><span>防衛</span><span>拡張</span><span>奇襲</span><span>再編</span>
         </div>
       </section>
     </div>
 
     <div class="actions">
-      <button id="newWarButton" type="button"><strong>NEW WAR</strong><span>性格・配置をすべて作り直す</span></button>
-      <button id="speedButton" type="button"><strong>SPEED ×1</strong><span>×1 → ×2 → ×4</span></button>
+      <button id="newWarButton" type="button"><strong>新しい戦局</strong><span>性格・配置をすべて作り直す</span></button>
+      <button id="speedButton" type="button"><strong>速度 ×1</strong><span>×1 → ×2 → ×4</span></button>
     </div>
   </section>
 
   <footer class="footer">
     <span>抽象化された架空勢力のシミュレーションです。</span>
-    <span>Canvas 2D / no external libraries</span>
+    <span>Canvas 2D / 外部ライブラリなし</span>
   </footer>
 </main>
-<script src="factions-v2.js"></script>
+<script src="factions-v3.js"></script>
 </body>
 </html>
