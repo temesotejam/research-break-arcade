@@ -271,6 +271,9 @@ async function boot(){
     mission:(life.currentMission&&life.currentMission.mapIndex===life.mapIndex)?structuredClone(life.currentMission):null
   };
   if(life.position&&life.position.mapIndex===life.mapIndex){roverState.x=life.position.x;roverState.z=life.position.z;roverState.heading=life.position.heading}
+  if(roverState.mission&&!["evolve","advance"].includes(roverState.mission.type)){
+    roverState.mission=null;life.currentMission=null;
+  }
   let running=false,paused=false,lastTime=performance.now(),saveTimer=0;
   const views=["overview","follow","rovercam","armcam"];let viewIndex=0,viewMode="overview";
   const logs=[];
@@ -367,64 +370,62 @@ async function boot(){
     decisionBadge.textContent=roverState.mission?"MISSION · "+roverState.mission.label:"THINKING…";
   }
 
+  function usefulUnknownForMission(mission){
+    const memory=mem(),done=new Set(memory.discovered);
+    const candidates=zones.filter(z=>memory.seen.includes(z.id)&&!done.has(z.id));
+    if(!mission)return candidates[0]||null;
+
+    if(mission.type==="evolve"){
+      const salvage=candidates.filter(z=>z.kind==="parts");
+      if(salvage.length)return salvage.sort((a,b)=>
+        Math.hypot(a.x-roverState.x,a.z-roverState.z)-Math.hypot(b.x-roverState.x,b.z-roverState.z)
+      )[0];
+      const mystery=candidates.filter(z=>recognitionLabel(z)==="?"); 
+      return mystery.sort((a,b)=>
+        Math.hypot(a.x-roverState.x,a.z-roverState.z)-Math.hypot(b.x-roverState.x,b.z-roverState.z)
+      )[0]||null;
+    }
+
+    if(mission.type==="advance"){
+      const priority=candidates.filter(z=>z.kind==="core"||z.kind==="gate");
+      if(priority.length)return priority.sort((a,b)=>
+        Math.hypot(a.x-roverState.x,a.z-roverState.z)-Math.hypot(b.x-roverState.x,b.z-roverState.z)
+      )[0];
+      const mystery=candidates.filter(z=>recognitionLabel(z)==="?"); 
+      return mystery.sort((a,b)=>
+        Math.hypot(a.x-roverState.x,a.z-roverState.z)-Math.hypot(b.x-roverState.x,b.z-roverState.z)
+      )[0]||null;
+    }
+    return null;
+  }
+
   function chooseMission(){
-    const m=mem(),unknown=knownUnexplored(),p=life.personality,exp=exploration();
-    const options=[];
-
-    for(const z of unknown){
-      const d=Math.hypot(z.x-roverState.x,z.z-roverState.z);
-      const cls=recognitionLabel(z);
-      const mystery=cls==="?"?24:0;
-      const utility=z.kind==="parts"?18:(z.kind==="core"?28:(z.kind==="gate"?22:5));
-      options.push({
-        type:"investigate",targetId:z.id,label:"INVESTIGATE "+z.id,
-        score:68+mystery+utility+p.curiosity*22-p.caution*d*.55+Math.random()*8
-      });
-    }
-
-    if(m.gateActivated){
-      options.push({type:"crossGate",label:"CROSS THE GATE",score:52+p.curiosity*30+exp*28-p.caution*8+Math.random()*5});
-    }else if(m.gateKnown||m.coreHeld){
-      options.push({type:"openGate",label:"OPEN THE GATE",score:66+p.curiosity*18+(m.gateKnown&&m.coreHeld?28:0)+Math.random()*5});
-    }
-
+    const memory=mem(),p=life.personality;
     const up=desiredUpgradeCandidate();
-    if(up){
-      const progress=clamp(life.parts/up.cost,0,1);
-      options.push({
-        type:"upgrade",upgradeId:up.id,label:"BUILD "+up.label,
-        score:34+p.improve*42+up.need*25+progress*16+Math.random()*7
-      });
+
+    if(!up){
+      setMission({type:"advance",label:"REACH NEXT WORLD"},"no remaining upgrade candidate");
+      continueMission();return;
     }
 
-    options.push({
-      type:"survey",label:"SURVEY UNMAPPED SECTOR",
-      remaining:2+Math.round(p.curiosity*2),
-      score:34+p.curiosity*33+(unseenZones().length?12:0)+Math.random()*7
-    });
+    const upgradeProgress=clamp(life.parts/up.cost,0,1);
+    const gateProgress=(memory.gateKnown?0.35:0)+(memory.coreHeld?0.35:0)+(memory.gateActivated?0.45:0);
+    const evolveScore=48+p.improve*34+up.need*24+upgradeProgress*20+Math.random()*6;
+    const advanceScore=44+p.curiosity*30+gateProgress*34+(life.upgrades.length>=2?8:0)+Math.random()*6;
 
-    options.sort((a,b)=>b.score-a.score);
-    const pick=options[0];
-    let reason="self-selected objective";
-    if(pick.type==="investigate")reason="visual anomaly worth resolving";
-    else if(pick.type==="openGate")reason="known clues can advance gateway";
-    else if(pick.type==="crossGate")reason="gateway is ready";
-    else if(pick.type==="upgrade")reason=life.parts>=UPGRADE_DEFS[pick.upgradeId].cost?"parts ready":"capability improvement desired";
-    else if(pick.type==="survey")reason="no higher-priority unresolved objective";
-    setMission(pick,reason);
+    if(advanceScore>evolveScore){
+      setMission({type:"advance",label:"REACH NEXT WORLD"},"next environment has become the stronger objective");
+    }else{
+      setMission({type:"evolve",upgradeId:up.id,label:"SELF EVOLUTION · "+up.label},"capability improvement is the stronger objective");
+    }
     continueMission();
   }
 
-  function knownSalvageTargets(){
-    const m=mem(),done=new Set(m.discovered);
-    return zones.filter(z=>z.kind==="parts"&&m.seen.includes(z.id)&&!done.has(z.id));
-  }
-
-  function startFrontierTravel(purposeLabel="survey"){
+  function startFrontierTravel(purposeLabel="goal-directed search"){
     const g=chooseFrontierGoal();
     roverState.movingScanPhase=0;
     startNavigation({x:g.x,z:g.z},"frontier",null,has("suspension")?.86:.68);
-    decisionBadge.textContent="MISSION · "+(roverState.mission?roverState.mission.label:"SURVEY");
+    decisionBadge.textContent="MISSION · "+(roverState.mission?roverState.mission.label:"GOAL");
     log(purposeLabel+" · viewpoint "+g.k);
   }
 
@@ -432,64 +433,58 @@ async function boot(){
     const mission=roverState.mission;
     if(!mission){chooseMission();return}
 
-    const m=mem();
+    const memory=mem();
     if(roverState.battery<28+life.personality.caution*16){
       startCharge();return;
     }
 
-    if(mission.type==="investigate"){
-      const z=missionZone();
-      if(!z){abortMission("target unavailable");return}
-      if(m.discovered.includes(z.id)){finishMission("target understood");return}
-      if(!m.seen.includes(z.id)){abortMission("visual contact lost");return}
-      navigateToZone(z);return;
-    }
-
-    if(mission.type==="upgrade"){
+    if(mission.type==="evolve"){
       const d=UPGRADE_DEFS[mission.upgradeId];
-      if(!d||has(mission.upgradeId)){finishMission("upgrade installed");return}
+      if(!d||has(mission.upgradeId)){finishMission("target capability acquired");return}
+
+      mission.step="BUILD "+d.label;
       if(life.parts>=d.cost){
+        mission.step="INSTALLING "+d.label;
         startUpgrade({id:mission.upgradeId,label:d.label,cost:d.cost,score:0,need:1});return;
       }
-      const salvage=knownSalvageTargets().sort((a,b)=>
-        Math.hypot(a.x-roverState.x,a.z-roverState.z)-Math.hypot(b.x-roverState.x,b.z-roverState.z)
-      )[0];
-      if(salvage){navigateToZone(salvage);return}
-      mission.step="SEARCHING FOR "+(d.cost-life.parts)+" PART"+(d.cost-life.parts===1?"":"S");
-      mission.searchSteps=(mission.searchSteps||0)+1;
-      startFrontierTravel("search salvage");return;
-    }
 
-    if(mission.type==="openGate"){
-      const gate=gateZone();
-      if(m.gateActivated){finishMission("gateway online");return}
-      if(m.gateKnown&&m.coreHeld){navigateToGate("activate");return}
-
-      if(!m.coreHeld){
-        const core=zones.find(z=>z.kind==="core"&&m.seen.includes(z.id)&&!m.discovered.includes(z.id));
-        if(core){navigateToZone(core);return}
+      const useful=usefulUnknownForMission(mission);
+      if(useful){
+        mission.step="CHECK "+useful.id+" FOR USEFUL MATERIAL";
+        navigateToZone(useful);return;
       }
-      if(!m.gateKnown){
-        const knownGate=zones.find(z=>z.kind==="gate"&&m.seen.includes(z.id)&&!m.discovered.includes(z.id));
-        if(knownGate){navigateToZone(knownGate);return}
+
+      const missing=d.cost-life.parts;
+      mission.step="FIND "+missing+" MORE PART"+(missing===1?"":"S")+" FOR "+d.label;
+      startFrontierTravel("searching for upgrade material");return;
+    }
+
+    if(mission.type==="advance"){
+      if(memory.gateActivated){
+        mission.step="ENTER ACTIVE GATE";
+        navigateToGate("enter");return;
       }
-      mission.step=!m.gateKnown?"LOCATING STRUCTURE":"SEARCHING FOR COMPATIBLE ARTIFACT";
-      mission.searchSteps=(mission.searchSteps||0)+1;
-      startFrontierTravel(mission.step.toLowerCase());return;
+
+      if(memory.gateKnown&&memory.coreHeld){
+        mission.step="RETURN TO GATE WITH KEY ARTIFACT";
+        navigateToGate("activate");return;
+      }
+
+      const useful=usefulUnknownForMission(mission);
+      if(useful){
+        if(useful.kind==="core")mission.step="EXAMINE POSSIBLE KEY ARTIFACT";
+        else if(useful.kind==="gate")mission.step="EXAMINE POSSIBLE GATE STRUCTURE";
+        else mission.step="IDENTIFY UNKNOWN OBJECT FOR GATE CLUES";
+        navigateToZone(useful);return;
+      }
+
+      if(!memory.gateKnown&&!memory.coreHeld)mission.step="FIND GATE STRUCTURE OR KEY ARTIFACT";
+      else if(!memory.gateKnown)mission.step="FIND STRUCTURE THAT ACCEPTS THE ARTIFACT";
+      else mission.step="FIND ARTIFACT THAT CAN ACTIVATE THE GATE";
+      startFrontierTravel("searching for route to next world");return;
     }
 
-    if(mission.type==="crossGate"){
-      if(!m.gateActivated){abortMission("gate no longer available");return}
-      navigateToGate("enter");return;
-    }
-
-    if(mission.type==="survey"){
-      if((mission.remaining||0)<=0){finishMission("sector survey complete");return}
-      mission.step=(mission.remaining||0)+" VIEWPOINT"+(mission.remaining===1?"":"S")+" REMAIN";
-      startFrontierTravel("survey sector");return;
-    }
-
-    abortMission("unknown objective");
+    abortMission("invalid top-level objective");
   }
 
   function decideNextStep(){
@@ -561,10 +556,7 @@ async function boot(){
       else if(roverState.navPurpose==="enter")startTransit();
       else if(roverState.navPurpose==="frontier"){
         markVisitedCell();
-        if(roverState.mission&&roverState.mission.type==="survey"){
-          roverState.mission.remaining=Math.max(0,(roverState.mission.remaining||1)-1);
-        }
-        log("mission viewpoint reached");saveLife();think();
+        log("goal-directed viewpoint reached");saveLife();think();
       }
       else think();
     }
@@ -642,7 +634,7 @@ async function boot(){
     life.parts-=up.cost;life.upgrades.push(up.id);roverState.battery=Math.min(maxBattery(),roverState.battery+(up.id==="battery"?35:0));
     life.personality.improve=clamp(life.personality.improve-.008,.25,.98);
     applyUpgradeVisuals();log("upgrade installed · "+up.label.toLowerCase());saveLife();
-    if(roverState.mission&&roverState.mission.type==="upgrade"&&roverState.mission.upgradeId===up.id){finishMission("upgrade installed");}
+    if(roverState.mission&&roverState.mission.type==="evolve"&&roverState.mission.upgradeId===up.id){finishMission("upgrade installed");}
     else think();
   }
 
@@ -915,9 +907,9 @@ async function boot(){
           saveLife();
           if(roverState.state==="NAV"&&roverState.navPurpose==="frontier"){
             roverState.speed=0;
-            const cm=roverState.mission;
-            if(cm&&cm.type==="survey"&&obj.zone){
-              setMission({type:"investigate",targetId:obj.zone.id,label:"INVESTIGATE "+obj.zone.id},"survey anomaly found");
+            if(roverState.mission&&obj.zone){
+              roverState.mission.step="NEW VISUAL CONTACT · CHECK RELEVANCE TO "+roverState.mission.label;
+              log("mission clue found · "+obj.zone.id);
             }
             think();
           }
@@ -962,8 +954,8 @@ async function boot(){
         roverState.navPurpose==="explore"?"見つけた対象へ移動中。":
         roverState.navPurpose==="activate"?"ゲートへ戻っています。":
         roverState.navPurpose==="enter"?"次の世界へ向かっています。":
-        roverState.navPurpose==="frontier"?"MISSIONのため次の観測地点へ移動中。":"自由移動中。",
-        roverState.navPurpose==="frontier"?"目的達成に必要な対象を探しながら走行しています。":(z?"目標まで "+d.toFixed(1)+" m。":"経路を調整しています。")
+        roverState.navPurpose==="frontier"?"最大目標を進めるため探索移動中。":"自由移動中。",
+        roverState.navPurpose==="frontier"?"改造材料または次の場所への手掛かりを探しながら走行しています。":(z?"目標まで "+d.toFixed(1)+" m。":"経路を調整しています。")
       ];
       case"SCAN":return["現地を詳しく調べています。","見つけた物が何なのか判別しています。"];
       case"PICKUP":return["見つけた物を回収しています。","将来何に使えるかは、まだ決めていません。"];
@@ -983,19 +975,16 @@ async function boot(){
     stateText.textContent=roverState.state;activityText.textContent=a;detailText.textContent=b;
     const mission=roverState.mission;
     missionText.textContent=mission?mission.label:"NO MISSION";
-    if(!mission)missionStepText.textContent="次の目的を選んでいます。";
-    else if(mission.type==="upgrade"){
+    if(!mission)missionStepText.textContent="次の最大目標を選んでいます。";
+    else if(mission.type==="evolve"){
       const d=UPGRADE_DEFS[mission.upgradeId];
-      missionStepText.textContent=life.parts>=(d?.cost||99)?"必要部品が揃いました。自己改造へ移ります。":"部品 "+life.parts+"/"+(d?.cost||"?")+"。不足分を探しています。";
-    }else if(mission.type==="openGate"){
-      missionStepText.textContent=mission.step||(m.gateKnown?(m.coreHeld?"ゲートへキーアイテムを運びます。":"対応するアイテムを探します。"):"ゲート構造を探します。");
-    }else if(mission.type==="survey"){
-      missionStepText.textContent=(mission.remaining||0)+" 個の未踏観測地点を確認したら完了します。";
-    }else if(mission.type==="investigate"){
-      missionStepText.textContent=(mission.targetId||"対象")+" の正体を確認します。";
-    }else if(mission.type==="crossGate"){
-      missionStepText.textContent="起動済みゲートへ移動し、次の環境へ進みます。";
-    }else missionStepText.textContent=mission.step||"目的達成へ向けて行動中です。";
+      const need=Math.max(0,(d?.cost||0)-life.parts);
+      if(need===0)missionStepText.textContent=(mission.step||"必要部品が揃いました。自己改造へ進みます。");
+      else missionStepText.textContent=(mission.step||("改造に必要な部品をあと "+need+" 個探します。"));
+    }else if(mission.type==="advance"){
+      if(m.gateActivated)missionStepText.textContent="ゲートは起動済みです。次の場所へ進みます。";
+      else missionStepText.textContent=mission.step||(m.gateKnown?(m.coreHeld?"キーアイテムをゲートへ運びます。":"ゲートを起動できるアイテムを探します。"):"次の場所へ進む入口とキーアイテムを探します。");
+    }else missionStepText.textContent="最大目標を再計画しています。";
     batteryText.textContent="BATTERY "+Math.round(roverState.battery/maxBattery()*100)+"%";speedText.textContent="SPEED "+Math.abs(roverState.speed).toFixed(2)+" m/s";
     partsText.textContent="PARTS "+life.parts;sampleText.textContent="SAMPLES "+life.samples;exploreText.textContent="EXPLORED "+pct+"%";
     headingText.textContent="H "+Math.round((roverState.heading*180/Math.PI+360)%360)+"° · P "+Math.round(THREE.MathUtils.radToDeg(roverState.mastYaw))+"° · T "+Math.round(THREE.MathUtils.radToDeg(roverState.mastPitch))+"°";updateMapUI();
