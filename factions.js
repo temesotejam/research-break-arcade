@@ -384,6 +384,7 @@ function loop(t){
   ctx.save();ctx.scale(sx,sy);render();ctx.restore();
   requestAnimationFrame(loop);
 }
-renderTraits();
+// Traits are populated only after reset() creates both faction personalities.
+render();
 requestAnimationFrame(loop);
 })();
