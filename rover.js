@@ -316,14 +316,6 @@ async function boot(){
     return candidates[0];
   }
 
-  function startFrontierTravel(){
-    const g=chooseFrontierGoal();
-    roverState.movingScanPhase=0;
-    startNavigation({x:g.x,z:g.z},"frontier",null,has("suspension")?.86:.68);
-    decisionBadge.textContent="CHOICE · NEW VIEWPOINT";
-    log("new viewpoint · cell "+g.k);
-  }
-
   function upgradeNeeds(){
     const e=life.exp,c=activeConfig;
     return{
@@ -413,7 +405,13 @@ async function boot(){
 
     options.sort((a,b)=>b.score-a.score);
     const pick=options[0];
-    setMission(pick,"self-selected objective");
+    let reason="self-selected objective";
+    if(pick.type==="investigate")reason="visual anomaly worth resolving";
+    else if(pick.type==="openGate")reason="known clues can advance gateway";
+    else if(pick.type==="crossGate")reason="gateway is ready";
+    else if(pick.type==="upgrade")reason=life.parts>=UPGRADE_DEFS[pick.upgradeId].cost?"parts ready":"capability improvement desired";
+    else if(pick.type==="survey")reason="no higher-priority unresolved objective";
+    setMission(pick,reason);
     continueMission();
   }
 
