@@ -335,7 +335,10 @@ function drawLabels(){
 }
 
 function render(){
-  ctx.imageSmoothingEnabled=false;drawGrid();drawInfluence();drawBases();drawNodes();drawUnits();drawLabels();
+  ctx.imageSmoothingEnabled=false;
+  drawGrid();
+  if(!factions.EMBER||!factions.AZURE)return;
+  drawInfluence();drawBases();drawNodes();drawUnits();drawLabels();
 }
 
 function traitHtml(f){
