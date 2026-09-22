@@ -157,8 +157,8 @@ async function boot(){
       }else if(def.kind==="gate"){
         const gate=new THREE.Group();
         const gm=new THREE.MeshStandardMaterial({color:0x4a433d,roughness:.85,metalness:.15});
-        const l=new THREE.Mesh(new THREE.BoxGeometry(.32,2.25,.42),gm),rr=l.clone(),top=new THREE.Mesh(new THREE.BoxGeometry(2.2,.32,.42),gm);
-        l.position.set(-.92,1.1,0);rr.position.set(.92,1.1,0);top.position.set(0,2.1,0);gate.add(l,rr,top);
+        const l=new THREE.Mesh(new THREE.BoxGeometry(.42,2.25,.32),gm),rr=l.clone(),top=new THREE.Mesh(new THREE.BoxGeometry(.42,.32,2.2),gm);
+        l.position.set(0,1.1,-.92);rr.position.set(0,1.1,.92);top.position.set(0,2.1,0);gate.add(l,rr,top);
         const portalMat=new THREE.MeshBasicMaterial({color:0x7ad7c9,transparent:true,opacity:.42,side:THREE.DoubleSide,depthWrite:false});
         const portal=new THREE.Mesh(new THREE.CircleGeometry(.83,48),portalMat);portal.position.y=1.1;portal.rotation.y=Math.PI/2;portal.visible=mem().gateActivated;gate.add(portal);
         gateVisual={group:gate,portal,mat:portalMat};
