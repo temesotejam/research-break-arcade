@@ -22,3 +22,15 @@
 .stage-wrap{border:4px solid #25261e;box-shadow:0 0 0 2px #7a795f inset}
 .view-badge,.decision-badge{border-radius:2px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
 #roverCanvas{font-smooth:never;-webkit-font-smoothing:none}
+
+.upgrade-clarity{margin-top:11px;padding-top:10px;border-top:1px solid var(--line)}
+.capability-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:5px}
+.capability{display:grid;grid-template-columns:28px 1fr;gap:2px 7px;padding:7px 8px;border:1px solid var(--line);background:rgba(255,255,255,.018);font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.capability b{grid-row:1/3;display:grid;place-items:center;font-size:10px}
+.capability span{font-size:9px;font-weight:800}
+.capability small{font-size:8px;color:var(--muted)}
+.capability.active{border-color:rgba(143,208,163,.55);background:rgba(93,155,106,.13)}
+.capability.active b{color:#9fe1b2}.capability.inactive{opacity:.50}
+.last-upgrade{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;margin-top:7px;padding:8px 9px;border-left:3px solid var(--accent);background:rgba(231,200,93,.06);font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.last-upgrade b{grid-row:1/3;color:var(--accent);font-size:9px}.last-upgrade span{font-size:10px;font-weight:900}.last-upgrade small{font-size:8px;color:var(--muted)}
+@media(max-width:760px){.capability-grid{grid-template-columns:1fr}}
