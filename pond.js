@@ -357,9 +357,6 @@ function drawPovRocks(rel,L,horizon){
  const visible=[];
  for(const r of rocks){const p=projectWorld(r.x,r.y,horizon);if(p&&p.dist<520)visible.push({p,r})}
  visible.sort((a,b)=>b.p.dist-a.p.dist);
- for(const {p,r} of visible){
-  const rr=r.r*p.p?0:r.r;
- }
  for(const item of visible){
   const p=item.p,r=item.r;
   const rx=clamp(r.r*p.scale*.75,3,55),ry=rx*.48;
