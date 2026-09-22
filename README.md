@@ -74,27 +74,42 @@
 
 ## Autonomous Mode — Tiny Bot / Minecraft World
 
-Minecraft風のブロック世界で、1台の自律ロボットが素材を集め、自分を改造し、ポータルから次のディメンションへ進む観察型シミュレーションです。
+Minecraft風のブロック世界で、1体の人型自律ロボットを観察する永続型シミュレーションです。通常のMinecraftらしい探索・採掘・ポータル進行に、ロボット自身の非戦闘アップグレード要素だけを追加しています。
 
+- ロボット本体は頭・胴体・両腕・両脚を持つMinecraft風のブロック人型
+- 移動中は腕と脚を振って歩き、頭そのものがパン / チルトするカメラ
 - 最大目標は **SELF EVOLUTION** と **REACH NEXT DIMENSION** の2つだけ
-- 移動・物体調査・採掘・充電は、2つの最大目標を進めるための下位行動
-- OVERWORLD PLAINS → NETHER WASTES → THE END → 以降はMinecraft風チャンクを継続生成
-- 約64 m角のブロック世界
-- 草ブロック、土、木、石、鉱石、ネザー柱、コーラス系構造、黒曜石ポータルを軽量3Dで表現
-- IRON / REDSTONE / QUARTZ / GOLD などを見つけて材料として回収
-- IRON TREADS / REDSTONE CELL / AMETHYST SCANNER / SLIME SUSPENSION / DIAMOND TOOL / DAYLIGHT ARRAY を自分で選んで装着
-- ポータルフレームと起動アイテムをカメラで探し、発見・回収・起動・通過まで自律実行
-- マストカメラはパン約±95°、チルト上28° / 下72°
+- 測量そのものはMISSIONにせず、移動・観察・採掘は2つの最大目標を進めるための下位行動
+- OVERWORLD PLAINS → NETHER WASTES → THE END → 以降もMinecraft風チャンクを継続生成
+- 約64 m角のボクセル地形。草 / 土 / 石 / 木 / 鉱石 / ネザー系ブロック / エンド系ブロック / ポータルを軽量3Dで表現
+- IRON / REDSTONE / QUARTZ / GOLD などを認識・採掘して材料として回収
 - カメラに映った物だけを新規認識し、未発見物の座標を意思決定には使用しない
 - 3Dバウンディングボックス投影、画面占有率、距離、複数点遮蔽判定から認識信頼度を算出
-- ROVER CAMでは検出枠、分類名、認識信頼度、距離を表示
-- 十分に分からない物体は `?`
+- ROVER CAMでは検出枠、分類名、認識信頼度、距離を表示。十分に分からない物体は `?`
 - 調査後は STONE / IRON ORE / REDSTONE ORE / FLINT & STEEL / NETHER PORTAL などMinecraft側の分類名へ更新
-- 木や一定サイズ以上の背景ブロックも視覚認識対象
-- カメラで対象が見えている間だけ解析・採掘・ポータル操作が進行
-- 進行、性格、MISSION、改造、材料、現在位置を Local Storage に保存
-- NEW LIFE でのみ自律個体を完全初期化
-- 時間制限・スコアなし
+- ポータルフレームと起動アイテムを探し、発見 → 回収 → 起動 → 通過まで自律実行
+
+### Self upgrades
+
+戦闘用の攻撃力 / 防御力アップはありません。代わりにロボット自身の探索能力が変化します。
+
+- **MOVEMENT MODULE** — 移動速度 ×1.48
+- **MINING MODULE** — 採掘・回収速度 ×1.85
+- **LONG-RANGE OPTICS** — 視認距離 ×1.65
+- **DETECTION ARRAY** — 認識信頼度 +14%、小さい物体も検出しやすくなる
+- **FAST ANALYZER** — 未知物体の解析速度 ×1.75
+- **POWER EFFICIENCY** — エネルギー消費 ×0.63
+
+アップグレードはロボット自身が現在不足している能力を評価して選び、外見にも反映されます。
+
+- MOVEMENT MODULE → 脚部モジュール
+- MINING MODULE → 右手の採掘ツール
+- LONG-RANGE OPTICS → 顔面バイザー
+- DETECTION ARRAY → 頭部アンテナ
+- FAST ANALYZER → 頭部解析モジュール
+- POWER EFFICIENCY → 胸部発光コア
+
+MISSION、性格、材料、アップグレード、ディメンション、現在位置は Local Storage に保存されます。NEW LIFE でのみ完全初期化します。
 
 公開ページ: `rover.html`
 
@@ -133,5 +148,5 @@ Minecraft風のブロック世界で、1台の自律ロボットが素材を集�
 - `orbit.js` — Orbit Sling ゲームロジック / Canvas描画
 - `rover.html` — Tiny Rover UI
 - `rover.css` — Tiny Rover デザイン
-- `rover.js` — Tiny Bot MISSION / 自己改造 / ポータル進行 / 視覚認識 / ボクセル世界
+- `rover.js` — Tiny Bot MISSION / 人型アニメーション / 非戦闘アップグレード / ポータル進行 / 視覚認識 / ボクセル世界
 - `pond.html` — Tiny Rover への互換リダイレクト
