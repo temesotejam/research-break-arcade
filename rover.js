@@ -589,7 +589,7 @@ async function boot(){
   function startFrontierTravel(purposeLabel="goal-directed search"){
     const g=chooseFrontierGoal();
     roverState.movingScanPhase=0;
-    startNavigation({x:g.x,z:g.z},"frontier",null,has("suspension")?.86:.68);
+    startNavigation({x:g.x,z:g.z},"frontier",null,.68*movementMultiplier());
     decisionBadge.textContent="MISSION · "+(roverState.mission?roverState.mission.label:"GOAL");
     log(purposeLabel+" · viewpoint "+g.k);
   }
@@ -664,13 +664,13 @@ async function boot(){
   function navigateToZone(z){
     const dx=roverState.x-z.x,dz=roverState.z-z.z,d=Math.max(.001,Math.hypot(dx,dz));
     const stand=z.kind==="gate"?1.65:(z.kind==="geology"?1.28:.95);
-    startNavigation({x:z.x+dx/d*stand,z:z.z+dz/d*stand},"explore",z,has("suspension")?.88:.70);
+    startNavigation({x:z.x+dx/d*stand,z:z.z+dz/d*stand},"explore",z,.70*movementMultiplier());
     log("frontier selected · "+z.id);
   }
   function gateZone(){return zones.find(z=>z.kind==="gate")}
   function navigateToGate(purpose){
     const g=gateZone();if(!g){think();return}
-    startNavigation({x:g.x-1.25,z:g.z},purpose,g,has("suspension")?.78:.62);log((purpose==="activate"?"returning to portal":"heading through portal"));
+    startNavigation({x:g.x-1.25,z:g.z},purpose,g,.62*movementMultiplier());log((purpose==="activate"?"returning to portal":"heading through portal"));
   }
 
   function steeringTo(goal){
@@ -682,7 +682,7 @@ async function boot(){
       if(roverState.targetZone&&o.zoneId===roverState.targetZone.id&&roverState.navPurpose==="explore")continue;
       const bodyDist=Math.hypot(roverState.x-o.x,roverState.z-o.z);
       if(!seenSet.has(o.zoneId)&&bodyDist>.62)continue;
-      const d=Math.hypot(fx-o.x,fz-o.z),rad=o.rad+(has("traction")?.18:.32);
+      const d=Math.hypot(fx-o.x,fz-o.z),rad=o.rad+.28;
       if(d<rad){
         const away=Math.atan2(fz-o.z,fx-o.x);let diff=wrap(away-roverState.heading);
         if(Math.abs(diff)<.15)diff=(Math.random()<.5?-1:1)*.55;
@@ -695,11 +695,11 @@ async function boot(){
   function updateNavigation(dt){
     const g=roverState.goal;if(!g){think();return}
     const dist=Math.hypot(g.x-roverState.x,g.z-roverState.z),desired=steeringTo(g),err=wrap(desired-roverState.heading);
-    const roughPenalty=activeConfig.rough*(has("suspension")?.22:.52);
+    const roughPenalty=activeConfig.rough*.34;
     const maxTurn=1.0*(1-clamp(Math.abs(roverState.speed),0,.9)*.35);
     roverState.yawRate=clamp(err*1.55,-maxTurn,maxTurn);roverState.heading=wrap(roverState.heading+roverState.yawRate*dt);
     const slope=Math.hypot(heightAt(roverState.x+.18,roverState.z)-heightAt(roverState.x-.18,roverState.z),heightAt(roverState.x,roverState.z+.18)-heightAt(roverState.x,roverState.z-.18));
-    const terrainFactor=clamp(1-roughPenalty-slope*(has("traction")?.8:1.8),.34,1);
+    const terrainFactor=clamp(1-roughPenalty-slope*1.05,.38,1);
     const turnFactor=1-clamp(Math.abs(err)/1.5,0,.60);
     const goalSpeed=roverState.targetSpeed*terrainFactor*turnFactor;
     roverState.speed+=(goalSpeed-roverState.speed)*Math.min(1,dt*2.0);
@@ -708,7 +708,7 @@ async function boot(){
 
     if(dist>roverState.prevDist-.006)roverState.stuckTime+=dt;else roverState.stuckTime=Math.max(0,roverState.stuckTime-dt*.9);
     roverState.prevDist=dist;
-    const stuckLimit=has("traction")?3.6:2.45;
+    const stuckLimit=has("speed")?3.0:2.45;
     if(roverState.stuckTime>stuckLimit){
       life.exp.stucks++;life.personality.caution=clamp(life.personality.caution+.012,.25,.95);life.personality.improve=clamp(life.personality.improve+.015,.25,.98);
       roverState.recoverSign=Math.random()<.5?-1:1;roverState.state="RECOVER";roverState.timer=1.65;roverState.stuckTime=0;log("path failed · learning from recovery");saveLife();return;
@@ -728,7 +728,7 @@ async function boot(){
   }
 
   function startScan(z){
-    roverState.state="SCAN";roverState.targetZone=z;roverState.timer=has("lidar")?1.25:2.55;roverState.scanProgress=0;roverState.mastYaw=0;life.exp.scans++;
+    roverState.state="SCAN";roverState.targetZone=z;roverState.timer=2.55/analysisMultiplier();roverState.scanProgress=0;roverState.mastYaw=0;life.exp.scans++;
     log("inspect block · "+z.id);
   }
   function resolvedClass(z){
@@ -756,15 +756,15 @@ async function boot(){
       log("portal frame identified · "+resolvedClass(z).toLowerCase());activityText.textContent="ポータル構造を記憶しました。";saveLife();think();return;
     }
     if(z.kind==="core"){
-      roverState.state="PICKUP";roverState.timer=has("arm")?1.25:2.35;roverState.armProgress=0;log("possible portal item identified");return;
+      roverState.state="PICKUP";roverState.timer=2.35/miningMultiplier();roverState.armProgress=0;log("possible portal item identified");return;
     }
     if(z.kind==="parts"){
-      roverState.state="PICKUP";roverState.timer=has("arm")?1.15:2.1;roverState.armProgress=0;log("ore vein identified · "+resolvedClass(z).toLowerCase());return;
+      roverState.state="PICKUP";roverState.timer=2.10/miningMultiplier();roverState.armProgress=0;log("ore vein identified · "+resolvedClass(z).toLowerCase());return;
     }
     if(!m.discovered.includes(z.id))m.discovered.push(z.id);z.discovered=true;
     const contactScore=(z.interest||.5)*(.55+life.personality.curiosity*.65)+(life.parts<2?.16:0);
     if(contactScore>.72){
-      roverState.state="CONTACT";roverState.timer=has("arm")?1.35:2.25;roverState.armProgress=0;log("surface contact selected");life.exp.contacts++;
+      roverState.state="CONTACT";roverState.timer=2.25/miningMultiplier();roverState.armProgress=0;log("surface contact selected");life.exp.contacts++;
     }else{
       log("scan sufficient · leaving site");saveLife();think();
     }
@@ -776,14 +776,14 @@ async function boot(){
     if(z.kind==="core"){
       m.coreHeld=true;if(z.mesh)z.mesh.visible=false;log("inventory + "+resolvedClass(z).toLowerCase());
     }else{
-      const gain=(z.parts||1)+(has("arm")?1:0);life.parts+=gain;if(z.mesh)z.mesh.visible=false;
+      const gain=(z.parts||1);life.parts+=gain;if(z.mesh)z.mesh.visible=false;
       log("mined "+resolvedClass(z).toLowerCase()+" · +"+gain+" material");
     }
     saveLife();think();
   }
   function finishContact(){
     life.samples++;const z=roverState.targetZone;
-    if(has("arm")&&Math.random()<.55){life.parts++;log("sample logged · reusable material +1")}else log("sample logged · "+z.label);
+    log("analysis stored · "+z.label);
     saveLife();think();
   }
 
@@ -835,14 +835,14 @@ async function boot(){
       const canSee=roverState.targetZone&&visibleToCamera(roverState.targetZone);
       if(canSee){
         roverState.timer-=dt;
-        roverState.armProgress=clamp(roverState.armProgress+dt*(has("arm")?.95:.55),0,1);
+        roverState.armProgress=clamp(roverState.armProgress+dt*.72*miningMultiplier(),0,1);
       }
       if(roverState.timer<=0)finishPickup();
     }else if(roverState.state==="CONTACT"){
       const canSee=roverState.targetZone&&visibleToCamera(roverState.targetZone);
       if(canSee){
         roverState.timer-=dt;
-        roverState.armProgress=clamp(roverState.armProgress+dt*(has("arm")?.9:.52),0,1);
+        roverState.armProgress=clamp(roverState.armProgress+dt*.68*miningMultiplier(),0,1);
       }
       if(roverState.timer<=0)finishContact();
     }else if(roverState.state==="UPGRADE"){
@@ -859,7 +859,7 @@ async function boot(){
       }
       if(roverState.timer<=0)finishGateActivation();
     }else if(roverState.state==="CHARGE"){
-      roverState.speed=0;roverState.yawRate=0;const rate=has("solar")?5.2:2.7;roverState.battery=Math.min(maxBattery(),roverState.battery+dt*rate);
+      roverState.speed=0;roverState.yawRate=0;const rate=has("efficiency")?3.8:2.7;roverState.battery=Math.min(maxBattery(),roverState.battery+dt*rate);
       if(roverState.battery>=maxBattery()*(.62+life.personality.caution*.14)){log("energy margin restored");saveLife();think()}
     }else if(roverState.state==="RECOVER"){
       roverState.timer-=dt;roverState.speed=-.28;roverState.yawRate=roverState.recoverSign*.44;roverState.heading=wrap(roverState.heading+roverState.yawRate*dt);
@@ -871,10 +871,9 @@ async function boot(){
     }
 
     if(Math.abs(roverState.speed)>.08)markVisitedCell();
-    const track=.98,left=roverState.speed-roverState.yawRate*track*.5,right=roverState.speed+roverState.yawRate*track*.5;
-    roverState.wheelAngleL=(roverState.wheelAngleL||0)-left*dt/.18;roverState.wheelAngleR=(roverState.wheelAngleR||0)-right*dt/.18;
+    roverState.walkPhase+=Math.abs(roverState.speed)*dt*8.2;
     const work=["SCAN","PICKUP","CONTACT","UPGRADE","ACTIVATE_GATE"].includes(roverState.state)?.07:0;
-    if(roverState.state!=="CHARGE")roverState.battery=Math.max(0,roverState.battery-dt*((Math.abs(roverState.speed)>.06?.30:.065)+work)*(has("battery")?.78:1));
+    if(roverState.state!=="CHARGE")roverState.battery=Math.max(0,roverState.battery-dt*((Math.abs(roverState.speed)>.06?.30:.065)+work)*efficiencyMultiplier());
     if(roverState.battery<=3&&roverState.state!=="CHARGE"){startCharge()}
   }
 
@@ -888,7 +887,7 @@ async function boot(){
     const pan=clamp(wrap(roverState.heading-worldBearing),-PAN_MAX,PAN_MAX);
     const horizontal=Math.max(.1,Math.hypot(dx,dz));
     const targetY=heightAt(zone.x,zone.z)+(zone.kind==="gate"?1.05:.28);
-    const cameraY=heightAt(roverState.x,roverState.z)+1.16;
+    const cameraY=heightAt(roverState.x,roverState.z)+1.52;
     const tilt=clamp(Math.atan2(targetY-cameraY,horizontal),TILT_DOWN,TILT_UP);
     return{pan,tilt};
   }
@@ -919,7 +918,7 @@ async function boot(){
     }
     roverState.mastYawTarget=clamp(pan,-PAN_MAX,PAN_MAX);
     roverState.mastPitchTarget=clamp(tilt,TILT_DOWN,TILT_UP);
-    const panStep=THREE.MathUtils.degToRad(has("lidar")?125:92)*dt;
+    const panStep=THREE.MathUtils.degToRad(has("vision")?118:92)*dt;
     const tiltStep=THREE.MathUtils.degToRad(68)*dt;
     const pd=wrap(roverState.mastYawTarget-roverState.mastYaw);
     roverState.mastYaw=wrap(roverState.mastYaw+clamp(pd,-panStep,panStep));
@@ -1036,12 +1035,13 @@ async function boot(){
     if(boxScratch.isEmpty()||!sensorFrustum.intersectsBox(boxScratch))return null;
     const center=boxScratch.getCenter(centerScratch);
     const dist=center.distanceTo(pose.origin);
-    const maxRange=has("lidar")?18.0:11.5;
+    const maxRange=11.5*visionMultiplier();
     if(dist>maxRange)return null;
 
     const rect=projectedRect(boxScratch);
     if(!rect)return null;
-    const minArea=obj.ambient?(has("lidar")?.00005:.00009):.00006;
+    const detectScale=has("detection")?.62:1;
+    const minArea=(obj.ambient?.00009:.00006)*detectScale;
     if(rect.screenFraction<minArea)return null;
 
     const samples=samplePoints(boxScratch);
@@ -1052,7 +1052,7 @@ async function boot(){
 
     const sizeScore=clamp(Math.sqrt(rect.screenFraction)*7.0,0,1);
     const distanceScore=clamp(1-dist/maxRange,0,1);
-    const confidence=clamp(.10+.32*sizeScore+.34*occlusion+.14*rect.visibleFraction+.10*distanceScore,.05,.99);
+    const confidence=clamp(.10+.32*sizeScore+.34*occlusion+.14*rect.visibleFraction+.10*distanceScore+detectionBoost(),.05,.99);
     const cls=rawClassFor(obj,confidence);
 
     return{obj,rect,dist,confidence,occlusion,cls};
@@ -1105,19 +1105,37 @@ async function boot(){
   }
 
   function updatePose(dt,time){
-    const x=roverState.x,z=roverState.z,fwd={x:Math.cos(roverState.heading),z:Math.sin(roverState.heading)},side={x:-fwd.z,z:fwd.x};
-    const front=heightAt(x+fwd.x*.5,z+fwd.z*.5),back=heightAt(x-fwd.x*.5,z-fwd.z*.5),left=heightAt(x+side.x*.42,z+side.z*.42),right=heightAt(x-side.x*.42,z-side.z*.42);
-    const suspensionFactor=has("suspension")?.55:1;
-    const contactClearance=has("traction")?.04:.008;
-    rover.position.set(x,heightAt(x,z)+contactClearance,z);
-    sun.position.set(x-8,11,z+4);sun.target.position.set(x,heightAt(x,z),z);sun.target.updateMatrixWorld();
-    rover.rotation.order="YXZ";rover.rotation.y=-roverState.heading;rover.rotation.x=Math.atan2(front-back,1)*suspensionFactor;rover.rotation.z=Math.atan2(right-left,.84)*suspensionFactor;
-    wheels.forEach(w=>{w.rotation.z=w.position.z>0?roverState.wheelAngleL:roverState.wheelAngleR});
+    const x=roverState.x,z=roverState.z;
+    const ground=heightAt(x,z);
+    rover.position.set(x,ground+.02,z);
+    sun.position.set(x-8,11,z+4);sun.target.position.set(x,ground,z);sun.target.updateMatrixWorld();
+
+    rover.rotation.order="YXZ";
+    rover.rotation.y=-roverState.heading;
+    rover.rotation.x=0;rover.rotation.z=0;
+
+    const moving=clamp(Math.abs(roverState.speed)/.65,0,1);
+    const walk=Math.sin(roverState.walkPhase)*.62*moving;
+    leftLegPivot.rotation.z=walk;
+    rightLegPivot.rotation.z=-walk;
+    leftArmPivot.rotation.z=-walk*.78;
+
+    roverState.armVisual+=(roverState.armProgress-roverState.armVisual)*(1-Math.exp(-dt*4.5));
+    const work=roverState.armVisual;
+    if(work>.06){
+      armBase.rotation.y=-.10;
+      shoulder.rotation.z=-(.35+1.00*work)+Math.sin(time*.012)*.12*work;
+      elbow.rotation.z=.35+.70*work;
+      wrist.rotation.z=-.15-.35*work;
+    }else{
+      armBase.rotation.y=0;
+      shoulder.rotation.z=walk*.78;
+      elbow.rotation.z=0;
+      wrist.rotation.z=0;
+    }
+
     mast.rotation.y=roverState.mastYaw;
     mastTilt.rotation.z=roverState.mastPitch;
-    lidarHead.rotation.y=time*.004;
-    roverState.armVisual+=(roverState.armProgress-roverState.armVisual)*(1-Math.exp(-dt*4.2));
-    const p=roverState.armVisual||0,e=p*p*(3-2*p);armBase.rotation.y=-.35+.42*e;shoulder.rotation.z=-(.18+1.05*e);elbow.rotation.z=.12+1.35*e;wrist.rotation.z=-(.05+.42*e);
   }
 
   function animateWorld(time){
@@ -1263,7 +1281,7 @@ async function boot(){
   newLifeButton.addEventListener("click",()=>{if(confirm("Tiny Bot の性格・記憶・改造をすべて初期化しますか？")){try{localStorage.removeItem(SAVE_KEY)}catch(_){}location.reload()}});
   window.addEventListener("blur",()=>{if(running&&!paused){paused=true;pauseButton.textContent="RESUME";pauseButton.setAttribute("aria-pressed","true");saveLife()}});
 
-  buildWorld();applyUpgradeVisualsAndBattery();rover.position.set(roverState.x,heightAt(roverState.x,roverState.z)+(has("traction")?.04:.008),roverState.z);updatePose(.016,0);updateUI();updateCamera(.016);
+  buildWorld();applyUpgradeVisualsAndBattery();rover.position.set(roverState.x,heightAt(roverState.x,roverState.z)+.02,roverState.z);updatePose(.016,0);updateUI();updateCamera(.016);
   if(life.position)log("saved life found · map "+String(life.mapIndex+1).padStart(2,"0"));
 
   function animate(time){
