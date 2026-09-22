@@ -2,15 +2,15 @@
 "use strict";
 
 const SAVE_KEY="rba-tiny-bot-retro-world-v1";
-const WORLD_SIZE=512;
+const WORLD_SIZE=128;
 const HALF=WORLD_SIZE/2;
 const VIEW_FOV=Math.PI*120/180;
-const SEARCH_CELL=16;
-const MAP_CELL=4;
+const SEARCH_CELL=6;
+const MAP_CELL=2;
 
 const $=id=>document.getElementById(id);
 const canvas=$("roverCanvas"),ctx=canvas.getContext("2d");
-const intro=$("intro"),enterButton=$("enterButton"),pauseButton=$("pauseButton");
+const intro=$("intro"),enterButton=$("enterButton");
 const viewButton=$("viewButton"),lightButton=$("lightButton"),newLifeButton=$("newLifeButton");
 const viewBadge=$("viewBadge"),decisionBadge=$("decisionBadge"),viewName=$("viewName");
 const stateText=$("stateText"),mapText=$("mapText"),missionText=$("missionText"),missionStepText=$("missionStepText");
@@ -85,11 +85,11 @@ function regionTheme(index){
 function tileAt(x,y){
   const ix=Math.floor(x),iy=Math.floor(y);
   if(Math.abs(ix)>HALF||Math.abs(iy)>HALF)return"void";
-  if(Math.hypot(ix,iy)<12)return"grass";
+  if(Math.hypot(ix,iy)<4)return"grass";
   const seed=life.regionIndex*997+31;
-  const elevation=.55*valueNoise(ix,iy,96,seed)+.30*valueNoise(ix,iy,38,seed+17)+.15*valueNoise(ix,iy,15,seed+43);
-  const moisture=.70*valueNoise(ix,iy,82,seed+101)+.30*valueNoise(ix,iy,24,seed+151);
-  const detail=valueNoise(ix,iy,11,seed+207);
+  const elevation=.55*valueNoise(ix,iy,24,seed)+.30*valueNoise(ix,iy,10,seed+17)+.15*valueNoise(ix,iy,4,seed+43);
+  const moisture=.70*valueNoise(ix,iy,21,seed+101)+.30*valueNoise(ix,iy,6,seed+151);
+  const detail=valueNoise(ix,iy,3,seed+207);
 
   if(life.regionIndex%4===1){
     if(elevation<.11)return"water";
@@ -133,7 +133,7 @@ function findPassable(rand,minR,maxR,used){
     const a=rand()*Math.PI*2,r=minR+rand()*(maxR-minR);
     const x=Math.round(Math.cos(a)*r),y=Math.round(Math.sin(a)*r);
     if(!passableTile(tileAt(x,y)))continue;
-    if(used.some(p=>dist(x,y,p.x,p.y)<18))continue;
+    if(used.some(p=>dist(x,y,p.x,p.y)<5))continue;
     return{x,y};
   }
   return{x:Math.round(minR),y:0};
@@ -142,18 +142,18 @@ function makeRegionObjects(){
   const rand=seeded(0x6d2b79f5+life.regionIndex*9187),used=[],out=[];
   const theme=regionTheme(life.regionIndex);
 
-  for(let i=0;i<22;i++){
-    const p=findPassable(rand,18,120,used);used.push(p);
+  for(let i=0;i<10;i++){
+    const p=findPassable(rand,5,30,used);used.push(p);
     out.push({id:"P-"+life.regionIndex+"-"+i,x:p.x,y:p.y,kind:"parts",label:"lost parts cache",className:"MACHINE PARTS",parts:1+(rand()>.76?1:0),radius:.8});
   }
-  for(let i=0;i<12;i++){
-    const p=findPassable(rand,25,145,used);used.push(p);
+  for(let i=0;i<6;i++){
+    const p=findPassable(rand,7,36,used);used.push(p);
     out.push({id:"R-"+life.regionIndex+"-"+i,x:p.x,y:p.y,kind:"ruin",label:theme.ruin,className:theme.ruin,interest:.45+rand()*.5,radius:1.2});
   }
-  const key=findPassable(rand,55,110,used);used.push(key);
+  const key=findPassable(rand,14,28,used);used.push(key);
   out.push({id:"KEY-"+life.regionIndex,x:key.x,y:key.y,kind:"core",label:theme.key,className:theme.key,radius:.9});
 
-  const gate=findPassable(rand,125,190,used);used.push(gate);
+  const gate=findPassable(rand,32,48,used);used.push(gate);
   out.push({id:"GATE-"+life.regionIndex,x:gate.x,y:gate.y,kind:"gate",label:theme.gate,className:theme.gate,radius:2.1});
 
   return out;
@@ -177,12 +177,12 @@ let life=loadLife();
 
 function mem(){
   const k=String(life.regionIndex);
-  if(!life.regions[k])life.regions[k]={seen:[],discovered:[],recognized:{},keyHeld:false,gateKnown:false,gateActive:false,visited:[],mapped:[],worldVersion:2};
+  if(!life.regions[k])life.regions[k]={seen:[],discovered:[],recognized:{},keyHeld:false,gateKnown:false,gateActive:false,visited:[],mapped:[],worldVersion:3};
   const m=life.regions[k];
   if(!Array.isArray(m.seen))m.seen=[];
   if(!Array.isArray(m.discovered))m.discovered=[];
   if(!m.recognized)m.recognized={};
-  if(m.worldVersion!==2){m.visited=[];m.mapped=[];m.worldVersion=2;}
+  if(m.worldVersion!==3){m.visited=[];m.mapped=[];m.worldVersion=3;}
   if(!Array.isArray(m.visited))m.visited=[];
   if(!Array.isArray(m.mapped))m.mapped=[];
   return m;
@@ -191,7 +191,7 @@ function mem(){
 let theme=regionTheme(life.regionIndex);
 let zones=[];
 let logs=[];
-let running=false,paused=false,lastTime=performance.now(),saveTimer=0,timeIndex=0;
+let running=false,lastTime=performance.now(),saveTimer=0,timeIndex=0;
 let viewMode="world",viewIndex=0;
 const views=["world","close","sensor"];
 let detections=[];
@@ -324,11 +324,11 @@ function markVisited(){
 }
 function chooseFrontier(){
   const m=mem(),visited=new Set(m.visited),cx=Math.round(bot.x/SEARCH_CELL),cy=Math.round(bot.y/SEARCH_CELL),c=[];
-  const desired=48+life.personality.curiosity*24;
+  const desired=12+life.personality.curiosity*8;
   for(let dx=-3;dx<=3;dx++)for(let dy=-3;dy<=3;dy++){
     if(dx===0&&dy===0)continue;
     const gx=cx+dx,gy=cy+dy,key=gx+","+gy,x=gx*SEARCH_CELL,y=gy*SEARCH_CELL;
-    if(Math.abs(x)>HALF-24||Math.abs(y)>HALF-24||visited.has(key))continue;
+    if(Math.abs(x)>HALF-7||Math.abs(y)>HALF-7||visited.has(key))continue;
     if(!passableTile(tileAt(x,y)))continue;
     const d=dist(bot.x,bot.y,x,y);
     const outward=Math.hypot(x,y)-Math.hypot(bot.x,bot.y);
@@ -799,19 +799,18 @@ function resize(){
 }
 
 enterButton.addEventListener("click",()=>{running=true;intro.hidden=true;log(life.position?"memory restored":"autonomy enabled");think()});
-pauseButton.addEventListener("click",()=>{if(!running)return;paused=!paused;pauseButton.textContent=paused?"RESUME":"PAUSE"});
 viewButton.addEventListener("click",cycleView);
 lightButton.addEventListener("click",()=>setTime((timeIndex+1)%TIMES.length));
 newLifeButton.addEventListener("click",()=>{if(confirm("Tiny Bot の性格・記憶・改造をすべて初期化しますか？")){localStorage.removeItem(SAVE_KEY);location.reload()}});
 window.addEventListener("resize",resize);
-window.addEventListener("blur",()=>{if(running&&!paused){paused=true;pauseButton.textContent="RESUME";saveLife()}});
+window.addEventListener("blur",()=>{if(running)saveLife()});
 
 buildRegion();resize();updatePerception();updateUI();render();
 if(life.position)log("saved journey restored · region "+String(life.regionIndex+1).padStart(2,"0"));
 
 function frame(time){
   const dt=Math.min(.04,Math.max(0,(time-lastTime)/1000||.016));lastTime=time;
-  if(running&&!paused){
+  if(running){
     updateBehavior(dt,time);updatePerception();updateUI();saveTimer+=dt;if(saveTimer>6){saveTimer=0;saveLife()}
   }
   render();requestAnimationFrame(frame);
