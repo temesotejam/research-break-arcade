@@ -100,9 +100,9 @@ async function boot(){
   }
   function mem(){
     const k=String(life.mapIndex);
-    if(!life.maps[k])life.maps[k]={seen:[],discovered:[],gateKnown:false,gateActivated:false,coreHeld:false,searchMisses:0};
+    if(!life.maps[k])life.maps[k]={seen:[],discovered:[],gateKnown:false,gateActivated:false,coreHeld:false,visitedCells:[]};
     if(!Array.isArray(life.maps[k].seen))life.maps[k].seen=[...life.maps[k].discovered];
-    if(!Number.isFinite(life.maps[k].searchMisses))life.maps[k].searchMisses=0;
+    if(!Array.isArray(life.maps[k].visitedCells))life.maps[k].visitedCells=[];
     return life.maps[k];
   }
 
@@ -228,7 +228,7 @@ async function boot(){
   const roverState={
     x:0,z:0,heading:.35,speed:0,targetSpeed:0,battery:clamp(life.battery||100,0,maxBattery()),state:"THINK",timer:1.2,
     targetZone:null,goal:null,navPurpose:null,prevDist:Infinity,stuckTime:0,recoverSign:1,
-    mastYaw:0,mastPitch:-.08,mastYawTarget:0,mastPitchTarget:-.08,searchPhase:0,searchSeenStart:0,
+    mastYaw:0,mastPitch:-.08,mastYawTarget:0,mastPitchTarget:-.08,movingScanPhase:0,
     armProgress:0,armVisual:0,scanProgress:0,yawRate:0,wheelAngleL:0,wheelAngleR:0,upgradeChoice:null
   };
   if(life.position&&life.position.mapIndex===life.mapIndex){roverState.x=life.position.x;roverState.z=life.position.z;roverState.heading=life.position.heading}
@@ -247,6 +247,40 @@ async function boot(){
   function unseenZones(){
     const seen=new Set(mem().seen);
     return zones.filter(z=>!seen.has(z.id));
+  }
+
+  const CELL=2.5;
+  function cellKey(x,z){return Math.round(x/CELL)+","+Math.round(z/CELL)}
+  function markVisitedCell(){
+    const m=mem(),k=cellKey(roverState.x,roverState.z);
+    if(!m.visitedCells.includes(k))m.visitedCells.push(k);
+  }
+  function chooseFrontierGoal(){
+    const m=mem(),visited=new Set(m.visitedCells),candidates=[];
+    for(let gx=-3;gx<=3;gx++){
+      for(let gz=-3;gz<=3;gz++){
+        const x=gx*CELL,z=gz*CELL,k=gx+","+gz;
+        if(visited.has(k))continue;
+        const d=Math.hypot(x-roverState.x,z-roverState.z);
+        const edge=Math.max(Math.abs(x),Math.abs(z))/7.5;
+        const score=d*.65+life.personality.curiosity*2.2+edge*.5+Math.random()*1.8;
+        candidates.push({x,z,k,score});
+      }
+    }
+    if(!candidates.length){
+      m.visitedCells=[];
+      return chooseFrontierGoal();
+    }
+    candidates.sort((a,b)=>b.score-a.score);
+    return candidates[0];
+  }
+
+  function startFrontierTravel(){
+    const g=chooseFrontierGoal();
+    roverState.movingScanPhase=0;
+    startNavigation({x:g.x,z:g.z},"frontier",null,has("suspension")?.86:.68);
+    decisionBadge.textContent="CHOICE · NEW VIEWPOINT";
+    log("new viewpoint · cell "+g.k);
   }
 
   function upgradeNeeds(){
@@ -286,12 +320,9 @@ async function boot(){
       options.push({type:"explore",zone:z,score:38+p.curiosity*34-p.caution*d*1.15+Math.random()*13+(unknown.length<3?6:0),label:"EXPLORE "+z.id});
     }
     if(unseen.length){
-      if(unknown.length===0){
-        options.push({type:"search",score:42+p.curiosity*42-p.caution*7-m.searchMisses*22+Math.random()*9,label:"CAMERA SEARCH"});
-      }
-      options.push({type:"wander",score:27+p.curiosity*28+m.searchMisses*17+Math.random()*12,label:"WANDER"});
+      options.push({type:"frontier",score:44+p.curiosity*40-p.caution*5+Math.random()*10,label:"NEW VIEWPOINT"});
     }
-    if(!options.length)options.push({type:"wander",score:30,label:"WANDER"});
+    if(!options.length)options.push({type:"frontier",score:30,label:"NEW VIEWPOINT"});
     options.sort((a,b)=>b.score-a.score);const pick=options[0],runner=options[1];
     decisionBadge.textContent="CHOICE · "+pick.label;
     log("choice: "+pick.label.toLowerCase()+(runner?" · alt "+runner.label.toLowerCase():""));
@@ -301,33 +332,8 @@ async function boot(){
     if(pick.type==="activate"){navigateToGate("activate");return}
     if(pick.type==="enter"){navigateToGate("enter");return}
     if(pick.type==="explore"){navigateToZone(pick.zone);return}
-    if(pick.type==="search"){startCameraSearch();return}
-    const ang=Math.random()*Math.PI*2,rr=rnd(2,6);startNavigation({x:Math.cos(ang)*rr,z:Math.sin(ang)*rr},"wander",null,.60);
-  }
-
-  function startCameraSearch(){
-    roverState.state="SEARCH";roverState.timer=7.4;roverState.searchPhase=0;roverState.searchSeenStart=mem().seen.length;
-    roverState.speed=0;roverState.yawRate=0;
-    log("camera search · near field → horizon");
-  }
-
-  function finishCameraSearch(){
-    const m=mem(),found=m.seen.length-roverState.searchSeenStart;
-    if(found>0){
-      m.searchMisses=0;
-      log("camera search complete · "+found+" new contact"+(found===1?"":"s"));
-      saveLife();think();
-      return;
-    }
-    m.searchMisses=Math.min(5,m.searchMisses+1);
-    log("no visual contact · move to new viewpoint");
-    saveLife();
-    const ang=roverState.heading+rnd(-1.15,1.15);
-    const rr=rnd(2.4,4.8);
-    startNavigation({
-      x:clamp(roverState.x+Math.cos(ang)*rr,-8.2,8.2),
-      z:clamp(roverState.z+Math.sin(ang)*rr,-8.2,8.2)
-    },"wander",null,has("suspension")?.82:.64);
+    if(pick.type==="frontier"){startFrontierTravel();return}
+    startFrontierTravel();
   }
 
   function startNavigation(goal,purpose,zone,speed){
@@ -392,6 +398,7 @@ async function boot(){
       if(roverState.navPurpose==="explore")startScan(roverState.targetZone);
       else if(roverState.navPurpose==="activate")startGateActivation();
       else if(roverState.navPurpose==="enter")startTransit();
+      else if(roverState.navPurpose==="frontier"){markVisitedCell();log("viewpoint reached");saveLife();think();}
       else think();
     }
   }
@@ -473,11 +480,7 @@ async function boot(){
 
   function updateBehavior(dt,time){
     if(roverState.state==="THINK"){roverState.timer-=dt;if(roverState.timer<=0)chooseAction()}
-    else if(roverState.state==="SEARCH"){
-      roverState.timer-=dt;roverState.searchPhase+=dt;
-      if(roverState.timer<=0)finishCameraSearch();
-    }
-    else if(roverState.state==="NAV")updateNavigation(dt);
+    else if(roverState.state==="NAV"){updateNavigation(dt);if(roverState.navPurpose==="frontier")roverState.movingScanPhase+=dt;}
     else if(roverState.state==="SCAN"){
       const canSee=roverState.targetZone&&visibleToCamera(roverState.targetZone);
       if(canSee){roverState.timer-=dt;roverState.scanProgress+=dt;}
@@ -521,6 +524,7 @@ async function boot(){
       if(roverState.timer<=0)advanceMap();
     }
 
+    if(Math.abs(roverState.speed)>.08)markVisitedCell();
     const track=.98,left=roverState.speed-roverState.yawRate*track*.5,right=roverState.speed+roverState.yawRate*track*.5;
     roverState.wheelAngleL=(roverState.wheelAngleL||0)-left*dt/.18;roverState.wheelAngleR=(roverState.wheelAngleR||0)-right*dt/.18;
     const work=["SCAN","PICKUP","CONTACT","UPGRADE","ACTIVATE_GATE"].includes(roverState.state)?.07:0;
@@ -545,18 +549,14 @@ async function boot(){
 
   function updateMast(dt,time){
     let pan=0,tilt=-.10;
-    if(roverState.state==="SEARCH"){
-      if(roverState.searchPhase<3.0){
-        const u=roverState.searchPhase/3.0;
-        pan=Math.sin(u*Math.PI*3.0)*THREE.MathUtils.degToRad(62);
-        tilt=THREE.MathUtils.degToRad(-62)+Math.sin(u*Math.PI*2)*THREE.MathUtils.degToRad(9);
-        decisionBadge.textContent="SEARCH · NEAR FIELD";
-      }else{
-        const u=roverState.searchPhase-3.0;
-        pan=Math.sin(u*1.45)*PAN_MAX;
-        tilt=THREE.MathUtils.degToRad(-10)+Math.sin(u*.90+1.1)*THREE.MathUtils.degToRad(22);
-        decisionBadge.textContent="SEARCH · HORIZON";
-      }
+    if(roverState.state==="NAV"&&roverState.navPurpose==="frontier"){
+      const phase=roverState.movingScanPhase;
+      const near=Math.sin(phase*.62)>.20;
+      pan=Math.sin(phase*1.15)*THREE.MathUtils.degToRad(72);
+      tilt=near
+        ? THREE.MathUtils.degToRad(-57)+Math.sin(phase*1.7)*THREE.MathUtils.degToRad(8)
+        : THREE.MathUtils.degToRad(-9)+Math.sin(phase*.82)*THREE.MathUtils.degToRad(19);
+      decisionBadge.textContent=near?"MOVING · NEAR FIELD":"MOVING · HORIZON";
     }else if(roverState.state==="UPGRADE"){
       pan=THREE.MathUtils.degToRad(-48)+Math.sin(time*.0011)*THREE.MathUtils.degToRad(12);
       tilt=THREE.MathUtils.degToRad(-64)+Math.sin(time*.0016)*THREE.MathUtils.degToRad(5);
@@ -646,6 +646,10 @@ async function boot(){
           log("visual contact · "+z.id+" · "+z.label);
           decisionBadge.textContent="SEEN · "+z.id;
           saveLife();
+          if(roverState.state==="NAV"&&roverState.navPurpose==="frontier"){
+            roverState.speed=0;
+            think();
+          }
         }
       }
     }
@@ -675,11 +679,13 @@ async function boot(){
     const z=roverState.targetZone,d=z?Math.hypot(z.x-roverState.x,z.z-roverState.z):0;
     switch(roverState.state){
       case"THINK":return["次に何をするか考えています。","カメラで実際に見た記憶だけを使って候補を比較しています。"];
-      case"SEARCH":return[
-        roverState.searchPhase<3?"足元と手元を確認しています。":"遠方をカメラで探索しています。",
-        roverState.searchPhase<3?"前輪の前・アーム作業域・車体周辺を下向きに走査しています。":"パンとチルトを使い、視野に入った物だけを新しく認識します。"
+      case"NAV":return[
+        roverState.navPurpose==="explore"?"見つけた対象へ移動中。":
+        roverState.navPurpose==="activate"?"ゲートへ戻っています。":
+        roverState.navPurpose==="enter"?"次の世界へ向かっています。":
+        roverState.navPurpose==="frontier"?"未踏の観測地点へ移動しながら探索中。":"自由移動中。",
+        roverState.navPurpose==="frontier"?"走行中も足元と遠方を交互にカメラ走査しています。":(z?"目標まで "+d.toFixed(1)+" m。":"経路を調整しています。")
       ];
-      case"NAV":return[roverState.navPurpose==="explore"?"未知領域へ移動中。":roverState.navPurpose==="activate"?"ゲートへ戻っています。":roverState.navPurpose==="enter"?"次の世界へ向かっています。":"自由移動中。",z?"目標まで "+d.toFixed(1)+" m。":"経路を調整しています。"];
       case"SCAN":return["現地を詳しく調べています。","見つけた物が何なのか判別しています。"];
       case"PICKUP":return["見つけた物を回収しています。","将来何に使えるかは、まだ決めていません。"];
       case"CONTACT":return["対象へ接触調査しています。","アームで表面を測定しています。"];
@@ -745,7 +751,7 @@ async function boot(){
       scopeReticle.classList.remove("locked");
       scopeReticle.style.left="50%";scopeReticle.style.top="50%";
       scopeTarget.textContent="SEARCHING";
-      scopeDistance.textContent=roverState.state==="SEARCH"&&roverState.searchPhase<3?"NEAR-FIELD SWEEP":"NO VISUAL CONTACT";
+      scopeDistance.textContent=roverState.state==="NAV"&&roverState.navPurpose==="frontier"?"SCANNING WHILE MOVING":"NO VISUAL CONTACT";
       return;
     }
 
