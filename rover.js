@@ -591,7 +591,7 @@ async function boot(){
 
   const PAN_MAX=THREE.MathUtils.degToRad(95),TILT_UP=THREE.MathUtils.degToRad(28),TILT_DOWN=THREE.MathUtils.degToRad(-72);
   const CAMERA_VFOV=THREE.MathUtils.degToRad(46);
-  let perceptionTimer=0,attentionZone=null,visibleZonesCache=[];
+  let perceptionTimer=0;
 
   function aimAnglesAt(zone){
     const dx=zone.x-roverState.x,dz=zone.z-roverState.z;
@@ -718,12 +718,13 @@ async function boot(){
 
   function rawClassFor(obj,confidence){
     if(obj.zone){
-      const known=recognitionLabel(obj.zone);
-      return known;
+      const m=mem(),known=m.recognized[obj.zone.id];
+      if(known)return known;
+      if(m.discovered.includes(obj.zone.id))return recognitionLabel(obj.zone);
+      if(obj.zone.kind==="geology")return confidence>=.58?"ROCK":"?";
+      return "?";
     }
-    if(obj.kind==="ambientRock"){
-      return confidence>=.66?"ROCK":"?";
-    }
+    if(obj.kind==="ambientRock")return confidence>=.66?"ROCK":"?";
     return "?";
   }
 
