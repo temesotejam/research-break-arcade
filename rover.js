@@ -2,10 +2,11 @@
 "use strict";
 
 const SAVE_KEY="rba-tiny-bot-retro-world-v1";
-const WORLD_SIZE=2048;
+const WORLD_SIZE=512;
 const HALF=WORLD_SIZE/2;
 const VIEW_FOV=Math.PI*120/180;
-const SEARCH_CELL=32;
+const SEARCH_CELL=16;
+const MAP_CELL=4;
 
 const $=id=>document.getElementById(id);
 const canvas=$("roverCanvas"),ctx=canvas.getContext("2d");
@@ -141,18 +142,18 @@ function makeRegionObjects(){
   const rand=seeded(0x6d2b79f5+life.regionIndex*9187),used=[],out=[];
   const theme=regionTheme(life.regionIndex);
 
-  for(let i=0;i<28;i++){
-    const p=findPassable(rand,35,430,used);used.push(p);
+  for(let i=0;i<22;i++){
+    const p=findPassable(rand,18,120,used);used.push(p);
     out.push({id:"P-"+life.regionIndex+"-"+i,x:p.x,y:p.y,kind:"parts",label:"lost parts cache",className:"MACHINE PARTS",parts:1+(rand()>.76?1:0),radius:.8});
   }
-  for(let i=0;i<16;i++){
-    const p=findPassable(rand,45,460,used);used.push(p);
+  for(let i=0;i<12;i++){
+    const p=findPassable(rand,25,145,used);used.push(p);
     out.push({id:"R-"+life.regionIndex+"-"+i,x:p.x,y:p.y,kind:"ruin",label:theme.ruin,className:theme.ruin,interest:.45+rand()*.5,radius:1.2});
   }
-  const key=findPassable(rand,180,360,used);used.push(key);
+  const key=findPassable(rand,55,110,used);used.push(key);
   out.push({id:"KEY-"+life.regionIndex,x:key.x,y:key.y,kind:"core",label:theme.key,className:theme.key,radius:.9});
 
-  const gate=findPassable(rand,430,620,used);used.push(gate);
+  const gate=findPassable(rand,125,190,used);used.push(gate);
   out.push({id:"GATE-"+life.regionIndex,x:gate.x,y:gate.y,kind:"gate",label:theme.gate,className:theme.gate,radius:2.1});
 
   return out;
@@ -176,12 +177,13 @@ let life=loadLife();
 
 function mem(){
   const k=String(life.regionIndex);
-  if(!life.regions[k])life.regions[k]={seen:[],discovered:[],recognized:{},keyHeld:false,gateKnown:false,gateActive:false,visited:[]};
+  if(!life.regions[k])life.regions[k]={seen:[],discovered:[],recognized:{},keyHeld:false,gateKnown:false,gateActive:false,visited:[],mapped:[]};
   const m=life.regions[k];
   if(!Array.isArray(m.seen))m.seen=[];
   if(!Array.isArray(m.discovered))m.discovered=[];
   if(!m.recognized)m.recognized={};
   if(!Array.isArray(m.visited))m.visited=[];
+  if(!Array.isArray(m.mapped))m.mapped=[];
   return m;
 }
 
@@ -192,6 +194,10 @@ let running=false,paused=false,lastTime=performance.now(),saveTimer=0,timeIndex=
 let viewMode="world",viewIndex=0;
 const views=["world","close","sensor"];
 let detections=[];
+const miniCanvas=document.createElement("canvas");
+miniCanvas.width=WORLD_SIZE/MAP_CELL;miniCanvas.height=WORLD_SIZE/MAP_CELL;
+const miniCtx=miniCanvas.getContext("2d");
+let mappedSet=new Set();
 
 const bot={
   x:0,y:0,heading:0,speed:0,targetSpeed:0,battery:life.battery||100,state:"THINK",timer:1,
@@ -204,10 +210,69 @@ if(life.position&&life.position.regionIndex===life.regionIndex){
 }
 if(bot.mission&&!["evolve","advance"].includes(bot.mission.type))bot.mission=null;
 
+function mapCellKey(cx,cy){return cx+","+cy}
+function mapCellFromWorld(x,y){
+  return{
+    cx:clamp(Math.floor((x+HALF)/MAP_CELL),0,miniCanvas.width-1),
+    cy:clamp(Math.floor((y+HALF)/MAP_CELL),0,miniCanvas.height-1)
+  };
+}
+function miniColorForTile(t){
+  const c=theme.colors;
+  if(t==="forest")return c.forest;
+  if(t==="water")return c.water;
+  if(t==="mountain")return c.mountain;
+  if(t==="sand")return c.sand;
+  if(t==="snow")return "#d6e3e3";
+  return c.grass;
+}
+function paintMiniCell(cx,cy){
+  const wx=-HALF+cx*MAP_CELL+MAP_CELL*.5,wy=-HALF+cy*MAP_CELL+MAP_CELL*.5;
+  miniCtx.fillStyle=miniColorForTile(tileAt(wx,wy));
+  miniCtx.fillRect(cx,cy,1,1);
+}
+function resetMiniMap(){
+  mappedSet=new Set(mem().mapped);
+  miniCtx.fillStyle="#060706";miniCtx.fillRect(0,0,miniCanvas.width,miniCanvas.height);
+  for(const key of mappedSet){
+    const [cx,cy]=key.split(",").map(Number);
+    paintMiniCell(cx,cy);
+  }
+}
+function mapCellKnown(cx,cy){
+  const key=mapCellKey(cx,cy);
+  if(mappedSet.has(key))return false;
+  mappedSet.add(key);mem().mapped.push(key);paintMiniCell(cx,cy);return true;
+}
+function revealMappedArea(){
+  const range=visionRange(),radius=Math.ceil(range/MAP_CELL),base=mapCellFromWorld(bot.x,bot.y);
+  // Immediate surroundings are always known.
+  for(let oy=-1;oy<=1;oy++)for(let ox=-1;ox<=1;ox++){
+    const cx=base.cx+ox,cy=base.cy+oy;
+    if(cx>=0&&cy>=0&&cx<miniCanvas.width&&cy<miniCanvas.height)mapCellKnown(cx,cy);
+  }
+  for(let oy=-radius;oy<=radius;oy++)for(let ox=-radius;ox<=radius;ox++){
+    const cx=base.cx+ox,cy=base.cy+oy;
+    if(cx<0||cy<0||cx>=miniCanvas.width||cy>=miniCanvas.height)continue;
+    const wx=-HALF+cx*MAP_CELL+MAP_CELL*.5,wy=-HALF+cy*MAP_CELL+MAP_CELL*.5;
+    const d=dist(bot.x,bot.y,wx,wy);if(d>range)continue;
+    const rel=wrap(Math.atan2(wy-bot.y,wx-bot.x)-bot.heading);
+    if(d>3&&Math.abs(rel)>VIEW_FOV*.5)continue;
+    let blocked=false;
+    const steps=Math.ceil(d/2);
+    for(let i=1;i<steps;i++){
+      const t=i/steps,tx=bot.x+(wx-bot.x)*t,ty=bot.y+(wy-bot.y)*t;
+      if(tileAt(tx,ty)==="mountain"){blocked=true;break}
+    }
+    if(!blocked)mapCellKnown(cx,cy);
+  }
+}
+
 function buildRegion(){
   theme=regionTheme(life.regionIndex);
   const discovered=new Set(mem().discovered);
   zones=makeRegionObjects().map(z=>({...z,taken:discovered.has(z.id)&&(z.kind==="parts"||z.kind==="core")}));
+  resetMiniMap();
   mapText.textContent="REGION "+String(life.regionIndex+1).padStart(2,"0")+" · "+theme.name;
 }
 function saveLife(){
@@ -260,7 +325,7 @@ function chooseFrontier(){
   for(let dx=-3;dx<=3;dx++)for(let dy=-3;dy<=3;dy++){
     if(dx===0&&dy===0)continue;
     const gx=cx+dx,gy=cy+dy,key=gx+","+gy,x=gx*SEARCH_CELL,y=gy*SEARCH_CELL;
-    if(Math.abs(x)>HALF-40||Math.abs(y)>HALF-40||visited.has(key))continue;
+    if(Math.abs(x)>HALF-24||Math.abs(y)>HALF-24||visited.has(key))continue;
     if(!passableTile(tileAt(x,y)))continue;
     const d=dist(bot.x,bot.y,x,y);
     const outward=Math.hypot(x,y)-Math.hypot(bot.x,bot.y);
@@ -488,6 +553,7 @@ function detectObjects(){
   return out;
 }
 function updatePerception(){
+  revealMappedArea();
   detections=detectObjects();const m=mem();
   for(const d of detections){
     const z=d.z;
@@ -555,7 +621,8 @@ function updateUI(){
   speedText.textContent="SPEED "+Math.abs(bot.speed).toFixed(2)+" tile/s";
   partsText.textContent="PARTS "+life.parts;
   sampleText.textContent="DISCOVERIES "+life.discoveries;
-  exploreText.textContent="WORLD "+WORLD_SIZE+"×"+WORLD_SIZE;
+  const mappedPct=mappedSet.size/(miniCanvas.width*miniCanvas.height)*100;
+  exploreText.textContent="MAPPED "+mappedPct.toFixed(mappedPct<10?1:0)+"%";
   headingText.textContent="X "+Math.round(bot.x)+" · Y "+Math.round(bot.y)+" · DIR "+Math.round((deg(bot.heading)+360)%360)+"°";
   curiosityFill.style.width=Math.round(life.personality.curiosity*100)+"%";
   cautionFill.style.width=Math.round(life.personality.caution*100)+"%";
@@ -683,6 +750,31 @@ function renderMap(tileSize,sensor=false){
   ctx.fillText("WORLD "+WORLD_SIZE+" × "+WORLD_SIZE,18,41);
 
   if(TIMES[timeIndex].overlay!=="rgba(0,0,0,0)"){ctx.fillStyle=TIMES[timeIndex].overlay;ctx.fillRect(0,0,canvas.width,canvas.height)}
+  drawMiniMap();
+}
+
+function drawMiniMap(){
+  const size=156,pad=12,x=canvas.width-size-pad,y=52;
+  ctx.save();
+  ctx.fillStyle="rgba(5,7,5,.88)";ctx.fillRect(x-5,y-18,size+10,size+25);
+  ctx.strokeStyle="#d7c96b";ctx.lineWidth=2;ctx.strokeRect(x-.5,y-.5,size+1,size+1);
+  ctx.imageSmoothingEnabled=false;ctx.drawImage(miniCanvas,x,y,size,size);
+
+  const scale=size/WORLD_SIZE;
+  const bx=x+(bot.x+HALF)*scale,by=y+(bot.y+HALF)*scale;
+  ctx.fillStyle="#fff2a8";ctx.fillRect(Math.round(bx)-2,Math.round(by)-2,5,5);
+
+  const m=mem();
+  for(const z of zones){
+    if(!m.seen.includes(z.id)&&!m.discovered.includes(z.id))continue;
+    const px=x+(z.x+HALF)*scale,py=y+(z.y+HALF)*scale;
+    ctx.fillStyle=z.kind==="gate"?(m.gateActive?"#71d7ff":"#d5d0c0"):z.kind==="core"?"#f3da59":z.kind==="ruin"?"#c1a77d":"#e08b52";
+    ctx.fillRect(Math.round(px)-1,Math.round(py)-1,3,3);
+  }
+  ctx.fillStyle="#f3e9b7";ctx.font="10px ui-monospace,monospace";ctx.textAlign="left";
+  ctx.fillText("MEMORY MAP",x,y-6);
+  ctx.fillStyle="#9f9b83";ctx.fillText("unknown = black",x+67,y-6);
+  ctx.restore();
 }
 
 function render(){
