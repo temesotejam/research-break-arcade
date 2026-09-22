@@ -36,7 +36,7 @@
           <span id="speedText">SPEED 0.00 tile/s</span>
           <span id="partsText">PARTS 0</span>
           <span id="sampleText">DISCOVERIES 0</span>
-          <span id="exploreText">WORLD 128×128</span>
+          <span id="exploreText">WORLD 64×64</span>
         </div>
       </div>
 
@@ -84,6 +84,13 @@
         <div>
           <span class="mini-label">SELF UPGRADES</span>
           <div id="upgradeList" class="chips"><span class="empty-chip">stock configuration</span></div>
+          <div class="upgrade-clarity">
+            <span class="mini-label">CAPABILITY STATUS</span>
+            <div id="capabilityStatus" class="capability-grid">
+              <div class="capability inactive"><b>—</b><span>NO MODULES YET</span><small>アップグレードすると変化量を表示します。</small></div>
+            </div>
+            <div id="lastUpgrade" class="last-upgrade"><b>LAST UPGRADE</b><span>NONE YET</span><small>能力変化はここに残ります。</small></div>
+          </div>
         </div>
         <div>
           <span class="mini-label">INVENTORY / WORLD MEMORY</span>
