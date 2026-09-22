@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#08111f">
+  <meta name="description" content="研究の合間に90秒だけ遊べる、軽量ブラウザゲーム集 Research Break Arcade。">
+  <title>Research Break Arcade — Tiny Lander</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">RESEARCH BREAK ARCADE</p>
+        <h1>Tiny Lander</h1>
+      </div>
+      <div class="top-actions">
+        <button id="soundButton" class="icon-button" type="button" aria-pressed="false" aria-label="効果音を切り替える">SOUND OFF</button>
+        <button id="pauseButton" class="icon-button" type="button" aria-pressed="false">PAUSE</button>
+      </div>
+    </header>
+
+    <section class="game-card" aria-label="Tiny Lander ゲーム">
+      <div class="hud" aria-live="polite">
+        <div class="hud-item"><span>TIME</span><strong id="timeValue">90.0</strong><small>s</small></div>
+        <div class="hud-item"><span>FUEL</span><strong id="fuelValue">100</strong><small>%</small></div>
+        <div class="hud-item"><span>ALT</span><strong id="altValue">--</strong><small>m</small></div>
+        <div class="hud-item"><span>V/S</span><strong id="vsValue">--</strong><small>m/s</small></div>
+        <div class="hud-item"><span>H/S</span><strong id="hsValue">--</strong><small>m/s</small></div>
+        <div class="hud-item desktop-only"><span>WIND</span><strong id="windValue">--</strong><small>m/s²</small></div>
+      </div>
+
+      <div class="canvas-wrap">
+        <canvas id="gameCanvas" width="960" height="600" aria-label="月面着陸ゲーム"></canvas>
+        <div id="overlay" class="overlay">
+          <div class="overlay-panel">
+            <p id="overlayKicker" class="overlay-kicker">90 SECOND BREAK</p>
+            <h2 id="overlayTitle">研究の合間に、ちょっと着陸。</h2>
+            <p id="overlayText">← → で横噴射、Space / ↑ でメイン噴射。着陸地点へ静かに降りてください。</p>
+            <div id="resultStats" class="result-stats" hidden></div>
+            <div class="overlay-actions">
+              <button id="primaryButton" class="primary-button" type="button">START BREAK</button>
+              <button id="secondaryButton" class="secondary-button" type="button" hidden>研究に戻る</button>
+            </div>
+            <p class="best-line">BEST <strong id="bestScoreValue">0</strong></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="mission-strip">
+        <span id="missionText">PAD に低速で着陸してください。</span>
+        <span id="environmentText">Gravity -- / Wind --</span>
+      </div>
+
+      <div class="touch-controls" aria-label="タッチ操作">
+        <button id="leftButton" type="button" aria-label="左へ噴射">←<span>LEFT</span></button>
+        <button id="thrustButton" class="thrust" type="button" aria-label="メイン噴射">▲<span>THRUST</span></button>
+        <button id="rightButton" type="button" aria-label="右へ噴射">→<span>RIGHT</span></button>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span>1 run ≈ 30–90 sec</span>
+      <span>Best score is saved on this device.</span>
+    </footer>
+  </main>
+
+  <script src="game.js"></script>
+</body>
+</html>
