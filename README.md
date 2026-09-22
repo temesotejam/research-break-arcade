@@ -117,6 +117,31 @@ MISSION、性格、部品、アップグレード、地域、現在座標は Loc
 
 旧 `pond.html` は Tiny Bot へリダイレクトします。
 
+## Autonomous Mode — Two Factions
+
+2つの架空勢力が簡易AIで争う、Canvas 2Dの抽象シミュレーションです。描画は点と小さな四角が中心ですが、勢力ごとに性格と戦略判断を持ちます。
+
+- 勢力: **EMBER** / **AZURE**
+- 各勢力は毎回ランダムな性格を持つ
+  - AGGRESSION
+  - CAUTION
+  - COORDINATION
+  - LOGISTICS
+  - ADAPTABILITY
+- 上位AIは戦況から **ATTACK / DEFEND / EXPAND / RAID / REGROUP** を選択
+- 拠点数、兵力比、自陣への圧力、負傷率、補給量などから各方針のUtilityを計算
+- 方針変更後の拠点獲得・撃破・損失を評価し、ADAPTABILITYに応じて次回の判断バイアスを少し更新
+- ユニットは LINE / SCOUT / SUPPORT の3役
+- COORDINATIONが高い勢力ほど集団行動しやすい
+- LOGISTICSが高い勢力ほど補給と再編成が安定
+- CAUTIONが高い勢力ほど負傷時に早く撤退
+- AGGRESSIONが高い勢力ほど敵拠点や敵部隊へ圧力をかけやすい
+- 中立CONTROL NODEを占領すると補給が増加
+- SPEED ×1 / ×2 / ×4
+- 外部ライブラリなし
+
+公開ページ: `factions.html`
+
 ## Run locally
 
 `index.html` をブラウザで開くだけでも動作します。ローカルHTTPサーバーを使う場合は任意の静的サーバーでこのディレクトリを配信してください。
@@ -151,4 +176,7 @@ MISSION、性格、部品、アップグレード、地域、現在座標は Loc
 - `rover.html` — Tiny Bot UI
 - `rover.css` — Tiny Bot / レトロRPG表示デザイン
 - `rover.js` — Pure Canvas 2D / 64×64 procedural world + recognition memory map / MISSION / 自己アップグレード / 地域進行 / 視覚認識
+- `factions.html` — Two Factions UI
+- `factions.css` — ドット描画シミュレーションUI
+- `factions.js` — 勢力Utility AI / 適応バイアス / ユニット行動
 - `pond.html` — Tiny Bot への互換リダイレクト
