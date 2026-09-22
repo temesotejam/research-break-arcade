@@ -153,7 +153,7 @@ async function boot(){
   const roverState={
     x:0,z:0,heading:.4,speed:0,targetSpeed:0,battery:100,samples:0,
     state:"SURVEY",timer:2.7,target:null,goal:null,prevDist:Infinity,stuckTime:0,recoverSign:1,recoverReturn:"DRIVE",
-    mastYaw:0,armProgress:0,scanProgress:0,distanceTravelled:0,wheelAngle:0
+    mastYaw:0,armProgress:0,scanProgress:0,distanceTravelled:0,yawRate:0,wheelAngleL:0,wheelAngleR:0
   };
   rover.position.set(0,h(0,0)+.32,0);
 
@@ -223,7 +223,8 @@ async function boot(){
     const desired=steeringTo(g);
     const err=wrap(desired-roverState.heading);
     const maxTurn=.92*(.45+1-clamp(roverState.speed/.8,0,1)*.45);
-    roverState.heading=wrap(roverState.heading+clamp(err*1.65,-maxTurn,maxTurn)*dt);
+    roverState.yawRate=clamp(err*1.65,-maxTurn,maxTurn);
+    roverState.heading=wrap(roverState.heading+roverState.yawRate*dt);
 
     const turnPenalty=1-clamp(Math.abs(err)/1.4,0,.62);
     const goalSpeed=roverState.targetSpeed*turnPenalty;
@@ -253,16 +254,19 @@ async function boot(){
     if(roverState.battery<20&&["DRIVE","SURVEY"].includes(roverState.state)){transition("CHARGE",0);roverState.speed=0;}
     switch(roverState.state){
       case "SURVEY":
+        roverState.yawRate=0;
         roverState.timer-=dt;roverState.mastYaw+=dt*.75;
         if(roverState.timer<=0)chooseTarget();
         break;
       case "DRIVE":
       case "APPROACH": updateDrive(dt);break;
       case "BRAKE":
+        roverState.yawRate=0;
         roverState.timer-=dt;roverState.speed*=Math.pow(.1,dt);
         if(roverState.timer<=0)transition("SCAN",2.6);
         break;
       case "SCAN":
+        roverState.yawRate=0;
         roverState.timer-=dt;roverState.scanProgress=1-roverState.timer/2.6;
         roverState.mastYaw=Math.sin(roverState.scanProgress*Math.PI*2)*.48;
         if(roverState.timer<=0){
@@ -277,10 +281,12 @@ async function boot(){
         }
         break;
       case "ARM_DEPLOY":
+        roverState.yawRate=0;
         roverState.timer-=dt;roverState.armProgress=clamp(1-roverState.timer/2,0,1);
         if(roverState.timer<=0)transition("SAMPLE",2.2);
         break;
       case "SAMPLE":
+        roverState.yawRate=0;
         roverState.timer-=dt;roverState.armProgress=1;
         if(roverState.timer<=0){
           roverState.samples++;roverState.target.sampled=true;roverState.target.visited=true;
@@ -289,22 +295,25 @@ async function boot(){
         }
         break;
       case "RETRACT":
+        roverState.yawRate=0;
         roverState.timer-=dt;roverState.armProgress=clamp(roverState.timer/1.7,0,1);
         if(roverState.timer<=0)transition("LOG",1.4);
         break;
       case "LOG":
+        roverState.yawRate=0;
         roverState.timer-=dt;
         if(roverState.timer<=0)transition("SURVEY",1.8);
         break;
       case "CHARGE":
-        roverState.speed=0;roverState.battery=Math.min(100,roverState.battery+dt*2.4);
+        roverState.speed=0;roverState.yawRate=0;roverState.battery=Math.min(100,roverState.battery+dt*2.4);
         roverState.mastYaw*=Math.pow(.2,dt);
         if(roverState.battery>=62){log("charge complete · 62%");transition("SURVEY",1.5);}
         break;
       case "RECOVER":
         roverState.timer-=dt;
         roverState.speed=-.28;
-        roverState.heading+=roverState.recoverSign*.42*dt;
+        roverState.yawRate=roverState.recoverSign*.42;
+        roverState.heading+=roverState.yawRate*dt;
         roverState.x+=Math.cos(roverState.heading)*roverState.speed*dt;
         roverState.z+=Math.sin(roverState.heading)*roverState.speed*dt;
         if(roverState.timer<=0){
@@ -315,7 +324,11 @@ async function boot(){
         break;
     }
 
-    roverState.wheelAngle-=roverState.speed*dt/.18;
+    const trackWidth=.98;
+    const leftSpeed=roverState.speed-roverState.yawRate*trackWidth*.5;
+    const rightSpeed=roverState.speed+roverState.yawRate*trackWidth*.5;
+    roverState.wheelAngleL-=leftSpeed*dt/.18;
+    roverState.wheelAngleR-=rightSpeed*dt/.18;
 
     const drain=(Math.abs(roverState.speed)>.08?.34:.08)+(["SCAN","ARM_DEPLOY","SAMPLE","RETRACT"].includes(roverState.state)?.08:0);
     if(roverState.state!=="CHARGE")roverState.battery=Math.max(0,roverState.battery-dt*drain);
@@ -332,7 +345,10 @@ async function boot(){
     rover.position.set(x,h(x,z)+.34,z);
     rover.rotation.order="YXZ";rover.rotation.y=-roverState.heading;rover.rotation.x=pitch;rover.rotation.z=roll;
 
-    for(const w of wheels)w.rotation.z=roverState.wheelAngle;
+    for(const w of wheels){
+      const isLeft=w.position.z>0;
+      w.rotation.z=isLeft?roverState.wheelAngleL:roverState.wheelAngleR;
+    }
 
     mast.rotation.y=roverState.mastYaw;
 
@@ -422,7 +438,7 @@ async function boot(){
 
   function resetSite(){
     roverState.x=0;roverState.z=0;roverState.heading=Math.random()*Math.PI*2;roverState.speed=0;roverState.targetSpeed=0;roverState.battery=100;roverState.samples=0;
-    roverState.target=null;roverState.goal=null;roverState.mastYaw=0;roverState.armProgress=0;roverState.distanceTravelled=0;roverState.wheelAngle=0;
+    roverState.target=null;roverState.goal=null;roverState.mastYaw=0;roverState.armProgress=0;roverState.distanceTravelled=0;roverState.yawRate=0;roverState.wheelAngleL=0;roverState.wheelAngleR=0;
     targets.forEach(t=>{t.visited=false;t.sampled=false});
     logs.length=0;logList.innerHTML="";transition("SURVEY",2.6);log("new site initialized");
   }
