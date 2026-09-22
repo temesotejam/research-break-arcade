@@ -191,7 +191,8 @@ function mem(){
 let theme=regionTheme(life.regionIndex);
 let zones=[];
 let logs=[];
-let running=false,lastTime=performance.now(),saveTimer=0,timeIndex=0;
+let running=false,lastTime=performance.now(),lastWall=Date.now(),saveTimer=0,timeIndex=0;
+let backgroundTimer=null,hiddenSince=null;
 let viewMode="world",viewIndex=0;
 const views=["world","close","sensor"];
 let detections=[];
@@ -798,23 +799,89 @@ function resize(){
   canvas.width=w;canvas.height=h;ctx.imageSmoothingEnabled=false;
 }
 
-enterButton.addEventListener("click",()=>{running=true;intro.hidden=true;log(life.position?"memory restored":"autonomy enabled");think()});
+function simulateLogicalTime(seconds, source="catch-up"){
+  if(!running||seconds<=0)return;
+  let remaining=Math.min(seconds, 6*60*60); // bound one resume burst to six hours
+  let simulated=0;
+  while(remaining>0){
+    const step=remaining>1800?1.0:(remaining>300?.5:.2);
+    const dt=Math.min(step,remaining);
+    updateBehavior(dt,Date.now());
+    // Keep perception fresh enough for scan/pickup/gate states and discoveries.
+    updatePerception();
+    simulated+=dt;remaining-=dt;
+  }
+  saveLife();
+  if(seconds>1.0)log(source+" · advanced "+Math.round(seconds)+" s");
+}
+
+function startBackgroundClock(){
+  if(backgroundTimer!==null)return;
+  let tickWall=Date.now();
+  backgroundTimer=setInterval(()=>{
+    const now=Date.now(),elapsed=(now-tickWall)/1000;tickWall=now;
+    if(running&&document.hidden&&elapsed>0){
+      simulateLogicalTime(elapsed,"background");
+      lastWall=now;
+    }
+  },1000);
+}
+
+function stopBackgroundClock(){
+  if(backgroundTimer!==null){clearInterval(backgroundTimer);backgroundTimer=null;}
+}
+
+enterButton.addEventListener("click",()=>{
+  running=true;intro.hidden=true;lastWall=Date.now();lastTime=performance.now();
+  log(life.position?"memory restored":"autonomy enabled");think();startBackgroundClock();
+});
 viewButton.addEventListener("click",cycleView);
 lightButton.addEventListener("click",()=>setTime((timeIndex+1)%TIMES.length));
 newLifeButton.addEventListener("click",()=>{if(confirm("Tiny Bot の性格・記憶・改造をすべて初期化しますか？")){localStorage.removeItem(SAVE_KEY);location.reload()}});
 window.addEventListener("resize",resize);
 window.addEventListener("blur",()=>{if(running)saveLife()});
+document.addEventListener("visibilitychange",()=>{
+  const now=Date.now();
+  if(document.hidden){
+    hiddenSince=now;lastWall=now;saveLife();startBackgroundClock();
+  }else{
+    const base=hiddenSince??lastWall;
+    const elapsed=Math.max(0,(now-base)/1000);
+    hiddenSince=null;
+    // Background timer may have advanced part or all of this period; lastWall tracks that.
+    const unaccounted=Math.max(0,(now-lastWall)/1000);
+    if(running&&unaccounted>.05)simulateLogicalTime(unaccounted,"resume catch-up");
+    lastWall=now;lastTime=performance.now();
+  }
+});
+window.addEventListener("pagehide",()=>{if(running){saveLife();hiddenSince=Date.now();}});
+window.addEventListener("pageshow",()=>{
+  const now=Date.now(),unaccounted=Math.max(0,(now-lastWall)/1000);
+  if(running&&unaccounted>.05)simulateLogicalTime(unaccounted,"page restore");
+  lastWall=now;lastTime=performance.now();
+});
 
 buildRegion();resize();updatePerception();updateUI();render();
 if(life.position)log("saved journey restored · region "+String(life.regionIndex+1).padStart(2,"0"));
 
 function frame(time){
-  const dt=Math.min(.04,Math.max(0,(time-lastTime)/1000||.016));lastTime=time;
-  if(running){
-    updateBehavior(dt,time);updatePerception();updateUI();saveTimer+=dt;if(saveTimer>6){saveTimer=0;saveLife()}
+  const rawDt=Math.max(0,(time-lastTime)/1000||.016);lastTime=time;
+  const nowWall=Date.now();
+  if(running&&!document.hidden){
+    if(rawDt>.12){
+      // rAF was suspended/throttled: recover the elapsed logical time instead of discarding it.
+      simulateLogicalTime(rawDt,"frame catch-up");
+    }else{
+      const dt=Math.min(.04,rawDt);
+      updateBehavior(dt,time);updatePerception();saveTimer+=dt;
+      if(saveTimer>6){saveTimer=0;saveLife()}
+    }
+    lastWall=nowWall;
+    updateUI();
   }
   render();requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+window.addEventListener("beforeunload",()=>{stopBackgroundClock();if(running)saveLife()});
 
 })();
