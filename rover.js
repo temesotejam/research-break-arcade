@@ -576,27 +576,27 @@ async function boot(){
 
     if(mission.type==="advance"){
       if(memory.gateActivated){
-        mission.step="ENTER ACTIVE GATE";
+        mission.step="ENTER ACTIVE PORTAL";
         navigateToGate("enter");return;
       }
 
       if(memory.gateKnown&&memory.coreHeld){
-        mission.step="RETURN TO GATE WITH KEY ARTIFACT";
+        mission.step="RETURN TO PORTAL WITH KEY ITEM";
         navigateToGate("activate");return;
       }
 
       const useful=usefulUnknownForMission(mission);
       if(useful){
-        if(useful.kind==="core")mission.step="EXAMINE POSSIBLE KEY ARTIFACT";
-        else if(useful.kind==="gate")mission.step="EXAMINE POSSIBLE GATE STRUCTURE";
-        else mission.step="IDENTIFY UNKNOWN OBJECT FOR GATE CLUES";
+        if(useful.kind==="core")mission.step="EXAMINE POSSIBLE PORTAL ITEM";
+        else if(useful.kind==="gate")mission.step="EXAMINE POSSIBLE PORTAL FRAME";
+        else mission.step="IDENTIFY UNKNOWN OBJECT FOR PORTAL CLUES";
         navigateToZone(useful);return;
       }
 
-      if(!memory.gateKnown&&!memory.coreHeld)mission.step="FIND GATE STRUCTURE OR KEY ARTIFACT";
-      else if(!memory.gateKnown)mission.step="FIND STRUCTURE THAT ACCEPTS THE ARTIFACT";
-      else mission.step="FIND ARTIFACT THAT CAN ACTIVATE THE GATE";
-      startFrontierTravel("searching for route to next world");return;
+      if(!memory.gateKnown&&!memory.coreHeld)mission.step="FIND PORTAL FRAME OR KEY ITEM";
+      else if(!memory.gateKnown)mission.step="FIND PORTAL FRAME";
+      else mission.step="FIND ITEM THAT CAN ACTIVATE THE PORTAL";
+      startFrontierTravel("searching for route to next dimension");return;
     }
 
     abortMission("invalid top-level objective");
@@ -620,7 +620,7 @@ async function boot(){
   function gateZone(){return zones.find(z=>z.kind==="gate")}
   function navigateToGate(purpose){
     const g=gateZone();if(!g){think();return}
-    startNavigation({x:g.x-1.25,z:g.z},purpose,g,has("suspension")?.78:.62);log((purpose==="activate"?"returning to gate":"heading through gate"));
+    startNavigation({x:g.x-1.25,z:g.z},purpose,g,has("suspension")?.78:.62);log((purpose==="activate"?"returning to portal":"heading through portal"));
   }
 
   function steeringTo(goal){
@@ -679,25 +679,23 @@ async function boot(){
 
   function startScan(z){
     roverState.state="SCAN";roverState.targetZone=z;roverState.timer=has("lidar")?1.25:2.55;roverState.scanProgress=0;roverState.mastYaw=0;life.exp.scans++;
-    log("local scan · "+z.id);
+    log("inspect block · "+z.id);
+  }
+  function resolvedClass(z){
+    if(z.kind==="geology")return z.blockType||"STONE";
+    if(z.kind==="parts")return (z.resource?z.resource+" ORE":"ORE");
+    if(z.kind==="core")return z.item||activeConfig.core||"PORTAL KEY";
+    if(z.kind==="gate")return z.portal||activeConfig.gateName||"PORTAL";
+    return "BLOCK";
   }
   function recognitionLabel(z){
     const m=mem(),known=m.recognized[z.id];
     if(known)return known;
-    if(m.discovered.includes(z.id)){
-      if(z.kind==="geology")return "ROCK";
-      if(z.kind==="parts")return "SALVAGE";
-      if(z.kind==="core")return "ARTIFACT";
-      if(z.kind==="gate")return "STRUCTURE";
-    }
-    return z.kind==="geology"?"ROCK":"?";
+    if(m.discovered.includes(z.id))return resolvedClass(z);
+    return "?";
   }
   function identifyZone(z){
-    const m=mem();
-    if(z.kind==="geology")m.recognized[z.id]="ROCK";
-    else if(z.kind==="parts")m.recognized[z.id]="SALVAGE";
-    else if(z.kind==="core")m.recognized[z.id]="ARTIFACT";
-    else if(z.kind==="gate")m.recognized[z.id]="STRUCTURE";
+    mem().recognized[z.id]=resolvedClass(z);
   }
 
   function resolveZone(){
@@ -705,13 +703,13 @@ async function boot(){
     if(z.kind==="gate"){
       if(!m.discovered.includes(z.id))m.discovered.push(z.id);z.discovered=true;m.gateKnown=true;
       if(z.mesh)z.mesh.visible=true;
-      log("memory: dormant gateway found");activityText.textContent="使い方の分からない構造物を記憶しました。";saveLife();think();return;
+      log("portal frame identified · "+resolvedClass(z).toLowerCase());activityText.textContent="ポータル構造を記憶しました。";saveLife();think();return;
     }
     if(z.kind==="core"){
-      roverState.state="PICKUP";roverState.timer=has("arm")?1.25:2.35;roverState.armProgress=0;log("unknown device detected");return;
+      roverState.state="PICKUP";roverState.timer=has("arm")?1.25:2.35;roverState.armProgress=0;log("possible portal item identified");return;
     }
     if(z.kind==="parts"){
-      roverState.state="PICKUP";roverState.timer=has("arm")?1.15:2.1;roverState.armProgress=0;log("usable hardware detected");return;
+      roverState.state="PICKUP";roverState.timer=has("arm")?1.15:2.1;roverState.armProgress=0;log("ore vein identified · "+resolvedClass(z).toLowerCase());return;
     }
     if(!m.discovered.includes(z.id))m.discovered.push(z.id);z.discovered=true;
     const contactScore=(z.interest||.5)*(.55+life.personality.curiosity*.65)+(life.parts<2?.16:0);
@@ -726,9 +724,10 @@ async function boot(){
     const z=roverState.targetZone,m=mem();
     if(!m.discovered.includes(z.id))m.discovered.push(z.id);z.discovered=true;
     if(z.kind==="core"){
-      m.coreHeld=true;if(z.mesh)z.mesh.visible=false;log("inventory + "+activeConfig.core.toLowerCase());
+      m.coreHeld=true;if(z.mesh)z.mesh.visible=false;log("inventory + "+resolvedClass(z).toLowerCase());
     }else{
-      const gain=(z.parts||1)+(has("arm")?1:0);life.parts+=gain;if(z.mesh)z.mesh.visible=false;log("parts recovered · +"+gain);
+      const gain=(z.parts||1)+(has("arm")?1:0);life.parts+=gain;if(z.mesh)z.mesh.visible=false;
+      log("mined "+resolvedClass(z).toLowerCase()+" · +"+gain+" material");
     }
     saveLife();think();
   }
@@ -754,11 +753,12 @@ async function boot(){
   }
 
   function startGateActivation(){
-    roverState.state="ACTIVATE_GATE";roverState.timer=3.1;roverState.armProgress=0;log("testing "+activeConfig.core.toLowerCase()+" with gateway");
+    roverState.state="ACTIVATE_GATE";roverState.timer=3.1;roverState.armProgress=0;
+    log("using "+activeConfig.core.toLowerCase()+" on "+(activeConfig.gateName||"portal").toLowerCase());
   }
   function finishGateActivation(){
     const m=mem();m.coreHeld=false;m.gateActivated=true;life.exp.gates++;
-    if(gateVisual)gateVisual.portal.visible=true;log("gateway online · destination unknown");saveLife();think();
+    if(gateVisual)gateVisual.portal.visible=true;log((activeConfig.gateName||"portal").toLowerCase()+" activated");saveLife();think();
   }
   function startTransit(){roverState.state="TRANSIT";roverState.timer=2.0;roverState.speed=.28;log("crossing threshold by own decision")}
   function advanceMap(){
@@ -960,10 +960,11 @@ async function boot(){
       const m=mem(),known=m.recognized[obj.zone.id];
       if(known)return known;
       if(m.discovered.includes(obj.zone.id))return recognitionLabel(obj.zone);
-      if(obj.zone.kind==="geology")return confidence>=.58?"ROCK":"?";
+      if(obj.zone.kind==="geology")return confidence>=.58?(obj.zone.blockType||"STONE"):"?";
       return "?";
     }
-    if(obj.kind==="ambientRock")return confidence>=.66?"ROCK":"?";
+    if(obj.className)return confidence>=(obj.classThreshold||.62)?obj.className:"?";
+    if(obj.kind==="ambientRock")return confidence>=.66?"STONE":"?";
     return "?";
   }
 
@@ -1058,7 +1059,11 @@ async function boot(){
   }
 
   function animateWorld(time){
-    if(gateVisual&&gateVisual.portal.visible){gateVisual.portal.rotation.z=time*.00045;gateVisual.mat.opacity=.28+.18*(.5+.5*Math.sin(time*.003));}
+    if(gateVisual&&gateVisual.portal.visible){
+      const pulse=.5+.5*Math.sin(time*.003);
+      gateVisual.mat.opacity=.32+.24*pulse;
+      gateVisual.portal.scale.set(1,1+.018*Math.sin(time*.005),1);
+    }
   }
 
   function activityCopy(){
@@ -1098,7 +1103,7 @@ async function boot(){
       else missionStepText.textContent=(mission.step||("改造に必要な部品をあと "+need+" 個探します。"));
     }else if(mission.type==="advance"){
       if(m.gateActivated)missionStepText.textContent="ポータルは起動済みです。次のディメンションへ進みます。";
-      else missionStepText.textContent=mission.step||(m.gateKnown?(m.coreHeld?"キーアイテムをポータルへ運びます。":"ポータルを起動できるアイテムを探します。"):"次のディメンションへ進む入口とキーアイテムを探します。");
+      else missionStepText.textContent=mission.step||(m.gateKnown?(m.coreHeld?activeConfig.core+" を "+(activeConfig.gateName||"PORTAL")+" へ運びます。":"ポータルを起動できるキーアイテムを探します。"):"ポータルフレームと起動アイテムを探します。");
     }else missionStepText.textContent="最大目標を再計画しています。";
     batteryText.textContent="BATTERY "+Math.round(roverState.battery/maxBattery()*100)+"%";speedText.textContent="SPEED "+Math.abs(roverState.speed).toFixed(2)+" m/s";
     partsText.textContent="MATERIALS "+life.parts;sampleText.textContent="ANALYSES "+life.samples;exploreText.textContent="EXPLORED "+pct+"%";
@@ -1107,7 +1112,7 @@ async function boot(){
     curiosityFill.style.width=Math.round(P.curiosity*100)+"%";cautionFill.style.width=Math.round(P.caution*100)+"%";improveFill.style.width=Math.round(P.improve*100)+"%";
     curiosityText.textContent=Math.round(P.curiosity*100);cautionText.textContent=Math.round(P.caution*100);improveText.textContent=Math.round(P.improve*100);
     upgradeList.innerHTML=life.upgrades.length?life.upgrades.map(u=>'<span class="upgrade-chip">'+UPGRADE_DEFS[u].label+'</span>').join(""):'<span class="empty-chip">stock configuration</span>';
-    const inv=[];if(m.coreHeld)inv.push(activeConfig.core);if(m.gateKnown)inv.push(m.gateActivated?"GATE: ONLINE":"GATE: REMEMBERED");if(life.parts)inv.push("MATERIAL UNITS ×"+life.parts);
+    const inv=[];if(m.coreHeld)inv.push(activeConfig.core);if(m.gateKnown)inv.push(m.gateActivated?"PORTAL: ACTIVE":"PORTAL: FOUND");if(life.parts)inv.push("MATERIAL UNITS ×"+life.parts);
     inventoryList.innerHTML=inv.length?inv.map(x=>'<span class="item-chip">'+x+'</span>').join(""):'<span class="empty-chip">nothing unusual yet</span>';
   }
 
@@ -1193,7 +1198,7 @@ async function boot(){
   enterButton.addEventListener("click",()=>{running=true;intro.hidden=true;log(life.position?"memory restored":"autonomy enabled");think()});
   pauseButton.addEventListener("click",()=>{if(!running)return;paused=!paused;pauseButton.textContent=paused?"RESUME":"PAUSE";pauseButton.setAttribute("aria-pressed",paused?"true":"false")});
   viewButton.addEventListener("click",cycleView);lightButton.addEventListener("click",()=>setLight((lightIndex+1)%lightPresets.length));
-  newLifeButton.addEventListener("click",()=>{if(confirm("Tiny Rover の性格・記憶・改造をすべて初期化しますか？")){try{localStorage.removeItem(SAVE_KEY)}catch(_){}location.reload()}});
+  newLifeButton.addEventListener("click",()=>{if(confirm("Tiny Bot の性格・記憶・改造をすべて初期化しますか？")){try{localStorage.removeItem(SAVE_KEY)}catch(_){}location.reload()}});
   window.addEventListener("blur",()=>{if(running&&!paused){paused=true;pauseButton.textContent="RESUME";pauseButton.setAttribute("aria-pressed","true");saveLife()}});
 
   buildWorld();applyUpgradeVisualsAndBattery();rover.position.set(roverState.x,heightAt(roverState.x,roverState.z)+(has("traction")?.04:.008),roverState.z);updatePose(.016,0);updateUI();updateCamera(.016);
