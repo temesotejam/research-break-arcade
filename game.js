@@ -39,7 +39,7 @@
   const MAX_VS = 2.25;
   const MAX_HS = 1.35;
   const MAX_START_OFFSET_PX = 200;
-  const MAX_START_HS = 2.5;
+  const MAX_START_HS = 0.25;
   const MAIN_FUEL_RATE = 8.0;
   const LATERAL_FUEL_RATE = 4.0;
   const keys = { left: false, right: false, thrust: false };
@@ -119,7 +119,7 @@
       100,
       Math.min(W - 100, pad.x + randomBetween(-MAX_START_OFFSET_PX, MAX_START_OFFSET_PX))
     );
-    lander.vx = randomBetween(-MAX_START_HS, MAX_START_HS);
+    lander.vx = randomBetween(-MAX_START_HS, MAX_START_HS) * PX_PER_M;
     lander.vy = randomBetween(0, 5);
 
     environmentText.textContent =
