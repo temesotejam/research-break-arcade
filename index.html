@@ -37,7 +37,7 @@
           <div class="overlay-panel">
             <p id="overlayKicker" class="overlay-kicker">90 SECOND BREAK</p>
             <h2 id="overlayTitle">研究の合間に、ちょっと着陸。</h2>
-            <p id="overlayText">← → で横噴射、Space / ↑ でメイン噴射。着陸地点へ静かに降りてください。</p>
+            <p id="overlayText">← → で横噴射、Space / ↑ でメイン噴射。<strong>機体全体をPAD内に入れ、V/S ≤ 2.25 m/s・H/S ≤ 1.35 m/sで接地すると成功</strong>です。</p>
             <div id="resultStats" class="result-stats" hidden></div>
             <div class="overlay-actions">
               <button id="primaryButton" class="primary-button" type="button">START BREAK</button>
@@ -49,8 +49,15 @@
       </div>
 
       <div class="mission-strip">
-        <span id="missionText">PAD に低速で着陸してください。</span>
+        <span id="missionText">3条件をすべて満たして接地すると SUCCESS。</span>
         <span id="environmentText">Gravity -- / Wind --</span>
+      </div>
+
+      <div class="landing-rules" aria-label="着陸成功条件">
+        <div id="padRule" class="landing-rule"><span class="rule-dot" aria-hidden="true"></span><strong>PAD</strong><small>機体全体がPAD内</small></div>
+        <div id="vsRule" class="landing-rule"><span class="rule-dot" aria-hidden="true"></span><strong>V/S ≤ 2.25</strong><small>縦速度 m/s</small></div>
+        <div id="hsRule" class="landing-rule"><span class="rule-dot" aria-hidden="true"></span><strong>H/S ≤ 1.35</strong><small>横速度 m/s</small></div>
+        <p>接地した瞬間に3つすべて緑なら着陸成功</p>
       </div>
 
       <div class="touch-controls" aria-label="タッチ操作">
