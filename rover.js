@@ -145,7 +145,7 @@ async function boot(){
 
   const roverState={
     x:0,z:0,heading:.4,speed:0,targetSpeed:0,battery:100,samples:0,
-    state:"SURVEY",timer:2.7,target:null,goal:null,prevDist:Infinity,stuckTime:0,recoverSign:1,
+    state:"SURVEY",timer:2.7,target:null,goal:null,prevDist:Infinity,stuckTime:0,recoverSign:1,recoverReturn:"DRIVE",
     mastYaw:0,armProgress:0,scanProgress:0,distanceTravelled:0
   };
   rover.position.set(0,h(0,0)+.32,0);
@@ -231,6 +231,7 @@ async function boot(){
     roverState.prevDist=dist;
     if(roverState.stuckTime>2.3){
       roverState.recoverSign=Math.random()<.5?-1:1;
+      roverState.recoverReturn=roverState.state;
       roverState.stuckTime=0;transition("RECOVER",1.7);return;
     }
 
@@ -299,7 +300,11 @@ async function boot(){
         roverState.heading+=roverState.recoverSign*.42*dt;
         roverState.x+=Math.cos(roverState.heading)*roverState.speed*dt;
         roverState.z+=Math.sin(roverState.heading)*roverState.speed*dt;
-        if(roverState.timer<=0){roverState.speed=0;log("recovery complete");roverState.state=roverState.target?"DRIVE":"SURVEY";if(roverState.target)roverState.targetSpeed=.55;}
+        if(roverState.timer<=0){
+          roverState.speed=0;log("recovery complete");
+          roverState.state=roverState.target?roverState.recoverReturn:"SURVEY";
+          if(roverState.target)roverState.targetSpeed=roverState.state==="APPROACH"?.34:.55;
+        }
         break;
     }
 
@@ -319,7 +324,7 @@ async function boot(){
     rover.rotation.order="YXZ";rover.rotation.y=-roverState.heading;rover.rotation.x=pitch;rover.rotation.z=roll;
 
     const wheelSpin=roverState.distanceTravelled/.18;
-    for(const w of wheels)w.rotation.y=wheelSpin;
+    for(const w of wheels){w.rotation.x=Math.PI/2;w.rotation.z=wheelSpin;}
 
     mast.rotation.y=roverState.mastYaw;
 
