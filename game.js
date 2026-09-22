@@ -15,6 +15,9 @@
   const soundButton = document.getElementById("soundButton");
   const missionText = document.getElementById("missionText");
   const environmentText = document.getElementById("environmentText");
+  const padRule = document.getElementById("padRule");
+  const vsRule = document.getElementById("vsRule");
+  const hsRule = document.getElementById("hsRule");
 
   const timeValue = document.getElementById("timeValue");
   const fuelValue = document.getElementById("fuelValue");
@@ -33,6 +36,8 @@
   const SESSION_SECONDS = 90;
   const LANDER_HALF_W = 14;
   const LANDER_HALF_H = 18;
+  const MAX_VS = 2.25;
+  const MAX_HS = 1.35;
   const keys = { left: false, right: false, thrust: false };
   const stars = makeStars(90);
 
@@ -118,7 +123,7 @@
       "Gravity " + env.gravity.toFixed(2) + " m/s² / Wind " +
       (env.wind >= 0 ? "+" : "") + env.wind.toFixed(2) + " m/s²";
     windValue.textContent = (env.wind >= 0 ? "+" : "") + env.wind.toFixed(2);
-    missionText.textContent = "PAD に低速で着陸してください。";
+    missionText.textContent = "3条件をすべて満たして接地すると SUCCESS。";
   }
 
   function startSession() {
@@ -221,7 +226,9 @@
     const onPad = lander.x >= padLeft && lander.x <= padRight;
     const vx = Math.abs(lander.vx / PX_PER_M);
     const vy = Math.abs(lander.vy / PX_PER_M);
-    const soft = vy <= 2.25 && vx <= 1.35;
+    const verticalOk = vy <= MAX_VS;
+    const horizontalOk = vx <= MAX_HS;
+    const soft = verticalOk && horizontalOk;
 
     lander.y = groundYAt(lander.x) - LANDER_HALF_H;
     lander.alive = false;
@@ -243,22 +250,32 @@
       missionText.textContent = "LANDING SUCCESS";
       beep(760, 0.08, 0.04);
       setTimeout(() => beep(980, 0.10, 0.035), 90);
-      showResult(true, score, vx, vy);
+      showResult(true, score, vx, vy, onPad, verticalOk, horizontalOk);
     } else {
       state = "result";
-      missionText.textContent = onPad ? "HARD LANDING" : "MISSED THE PAD";
+      const failed = [];
+      if (!onPad) failed.push("PAD外");
+      if (!verticalOk) failed.push("V/S超過");
+      if (!horizontalOk) failed.push("H/S超過");
+      missionText.textContent = "FAILED: " + failed.join(" / ");
       beep(150, 0.15, 0.05);
-      showResult(false, 0, vx, vy);
+      showResult(false, 0, vx, vy, onPad, verticalOk, horizontalOk);
     }
   }
 
-  function showResult(success, score, vx, vy) {
+  function showResult(success, score, vx, vy, onPad, verticalOk, horizontalOk) {
     overlay.hidden = false;
     overlayKicker.textContent = success ? "TOUCHDOWN" : "TRY AGAIN";
     overlayTitle.textContent = success ? "着陸成功。" : "着陸失敗。";
-    overlayText.textContent = success
-      ? "静かに降りられました。残り時間でもう一度だけ狙えます。"
-      : "PAD の中央を狙い、接地直前に縦速度を落とすと安定します。";
+    if (success) {
+      overlayText.textContent = "3条件をすべて満たしました。残り時間でもう一度狙えます。";
+    } else {
+      const reasons = [];
+      if (!onPad) reasons.push("機体全体がPAD内に入っていません");
+      if (!verticalOk) reasons.push("V/S が 2.25 m/s を超えています");
+      if (!horizontalOk) reasons.push("H/S が 1.35 m/s を超えています");
+      overlayText.textContent = "失敗理由: " + reasons.join(" / ");
+    }
 
     resultStats.hidden = false;
     resultStats.innerHTML =
@@ -339,10 +356,26 @@
   function updateHud() {
     const ground = groundYAt(lander.x);
     const altitude = Math.max(0, (ground - (lander.y + LANDER_HALF_H)) / PX_PER_M);
+    const vs = Math.abs(lander.vy / PX_PER_M);
+    const hs = Math.abs(lander.vx / PX_PER_M);
+    const safePadLeft = pad.x - pad.width / 2 + LANDER_HALF_W;
+    const safePadRight = pad.x + pad.width / 2 - LANDER_HALF_W;
+    const onPad = lander.x >= safePadLeft && lander.x <= safePadRight;
+
     fuelValue.textContent = Math.round(lander.fuel);
     altValue.textContent = altitude.toFixed(1);
-    vsValue.textContent = Math.abs(lander.vy / PX_PER_M).toFixed(2);
-    hsValue.textContent = Math.abs(lander.vx / PX_PER_M).toFixed(2);
+    vsValue.textContent = vs.toFixed(2);
+    hsValue.textContent = hs.toFixed(2);
+
+    setRuleState(padRule, onPad);
+    setRuleState(vsRule, vs <= MAX_VS);
+    setRuleState(hsRule, hs <= MAX_HS);
+  }
+
+  function setRuleState(element, ok) {
+    if (!element) return;
+    element.classList.toggle("ok", ok);
+    element.setAttribute("aria-label", (ok ? "条件達成: " : "条件未達: ") + element.textContent.trim());
   }
 
   function draw() {
@@ -430,10 +463,21 @@
     ctx.stroke();
     ctx.fillRect(left, pad.y - 7, pad.width, 6);
 
+    const safeLeft = left + LANDER_HALF_W;
+    const safeRight = right - LANDER_HALF_W;
+    ctx.strokeStyle = "rgba(167, 243, 208, .56)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(safeLeft, pad.y - 9);
+    ctx.lineTo(safeLeft, pad.y + 4);
+    ctx.moveTo(safeRight, pad.y - 9);
+    ctx.lineTo(safeRight, pad.y + 4);
+    ctx.stroke();
+
     ctx.fillStyle = "rgba(208, 239, 255, .84)";
     ctx.font = "800 11px system-ui";
     ctx.textAlign = "center";
-    ctx.fillText("PAD", pad.x, pad.y + 18);
+    ctx.fillText("PAD / LAND HERE", pad.x, pad.y + 18);
 
     ctx.strokeStyle = "rgba(139, 224, 255, .30)";
     ctx.lineWidth = 1;
