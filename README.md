@@ -41,6 +41,21 @@
 
 公開ページ: `tower.html`
 
+## Game 04 — One Button Drift
+
+自動で走る車を1ボタンだけで周回させるドリフトゲームです。
+
+- PC: `Space` を押している間だけ左旋回
+- Mobile: 画面下の DRIFT を長押し
+- 離すと直進、押しすぎると内側、離しすぎると外側へ
+- 路面中央を維持すると FLOW 倍率が上昇
+- 4チェックポイントを順番に通過すると1周
+- 大きくコースアウトすると最後のチェックポイントへ自動復帰
+- 1セッション 90 秒
+- ベストスコアはブラウザの Local Storage に保存
+
+公開ページ: `drift.html`
+
 ## Run locally
 
 `index.html` をブラウザで開くだけでも動作します。ローカルHTTPサーバーを使う場合は任意の静的サーバーでこのディレクトリを配信してください。
@@ -66,3 +81,6 @@
 - `tower.html` — Stack Tower UI
 - `tower.css` — Stack Tower デザイン
 - `tower.js` — Stack Tower ゲームロジック / Canvas描画
+- `drift.html` — One Button Drift UI
+- `drift.css` — One Button Drift デザイン
+- `drift.js` — One Button Drift ゲームロジック / Canvas描画
