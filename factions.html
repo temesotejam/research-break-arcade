@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0b0c10">
   <meta name="description" content="2つの勢力が簡易AIで争い、戦況に応じて方針を変えるドット描画シミュレーション。">
   <title>Research Break Arcade — Two Factions</title>
-  <link rel="stylesheet" href="factions.css">
+  <link rel="stylesheet" href="factions-v2.css">
 </head>
 <body>
 <main class="app">
@@ -36,14 +36,6 @@
     <div class="stage-wrap">
       <canvas id="simCanvas" width="960" height="600" aria-label="2勢力の自律戦闘シミュレーション"></canvas>
       <div class="legend"><span class="dot ember"></span>EMBER <span class="dot azure"></span>AZURE <span class="node-dot"></span>CONTROL NODE</div>
-      <div id="intro" class="intro">
-        <div class="intro-panel">
-          <p class="intro-kicker">SIMPLE PIXEL SIMULATION</p>
-          <h2>同じ条件でも、毎回ちがう性格になります。</h2>
-          <p>2勢力は攻撃性・慎重さ・連携・補給重視・適応力が異なり、戦況から方針を変えます。見た目は単純な点ですが、中では別々の判断をしています。</p>
-          <button id="startButton" type="button">SIMULATION START</button>
-        </div>
-      </div>
     </div>
 
     <div class="faction-grid">
@@ -98,6 +90,6 @@
     <span>Canvas 2D / no external libraries</span>
   </footer>
 </main>
-<script src="factions.js"></script>
+<script src="factions-v2.js"></script>
 </body>
 </html>
