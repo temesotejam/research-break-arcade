@@ -99,7 +99,8 @@ async function boot(){
   }
   function mem(){
     const k=String(life.mapIndex);
-    if(!life.maps[k])life.maps[k]={discovered:[],gateKnown:false,gateActivated:false,coreHeld:false};
+    if(!life.maps[k])life.maps[k]={seen:[],discovered:[],gateKnown:false,gateActivated:false,coreHeld:false};
+    if(!Array.isArray(life.maps[k].seen))life.maps[k].seen=[...life.maps[k].discovered];
     return life.maps[k];
   }
 
@@ -161,7 +162,7 @@ async function boot(){
         l.position.set(0,1.1,-.92);rr.position.set(0,1.1,.92);top.position.set(0,2.1,0);gate.add(l,rr,top);
         const portalMat=new THREE.MeshBasicMaterial({color:0x7ad7c9,transparent:true,opacity:.42,side:THREE.DoubleSide,depthWrite:false});
         const portal=new THREE.Mesh(new THREE.CircleGeometry(.83,48),portalMat);portal.position.y=1.1;portal.rotation.y=Math.PI/2;portal.visible=mem().gateActivated;gate.add(portal);
-        gate.visible=discovered.has(def.id)||mem().gateActivated;
+        gate.visible=true;
         gateVisual={group:gate,portal,mat:portalMat};
         mesh=gate;obstacles.push({x:def.x,z:def.z,rad:1.0,zoneId:def.id});
       }
@@ -184,8 +185,10 @@ async function boot(){
   const deck=new THREE.Mesh(new THREE.BoxGeometry(1.06,.055,.72),panelMat);deck.position.y=.56;deck.castShadow=true;rover.add(deck);
   const mast=new THREE.Group();mast.position.set(.18,.58,0);rover.add(mast);
   const mastStem=new THREE.Mesh(new THREE.CylinderGeometry(.045,.055,.55,10),brassMat);mastStem.position.y=.27;mast.add(mastStem);
-  const mastHead=new THREE.Mesh(new THREE.BoxGeometry(.23,.14,.18),darkMat);mastHead.position.y=.58;mast.add(mastHead);
-  const lens=new THREE.Mesh(new THREE.CylinderGeometry(.045,.045,.045,16),new THREE.MeshStandardMaterial({color:0x0c1115,metalness:.5,roughness:.15}));lens.rotation.z=Math.PI/2;lens.position.set(.13,.59,0);mast.add(lens);
+  const mastTilt=new THREE.Group();mastTilt.position.y=.58;mast.add(mastTilt);
+  const mastHead=new THREE.Mesh(new THREE.BoxGeometry(.23,.14,.18),darkMat);mastHead.castShadow=true;mastTilt.add(mastHead);
+  const lens=new THREE.Mesh(new THREE.CylinderGeometry(.045,.045,.045,16),new THREE.MeshStandardMaterial({color:0x0c1115,metalness:.5,roughness:.15}));
+  lens.rotation.z=Math.PI/2;lens.position.set(.13,0,0);mastTilt.add(lens);
 
   const wheelGeo=new THREE.CylinderGeometry(.18,.18,.12,24);wheelGeo.rotateX(Math.PI/2);const wheels=[];
   for(const x of [-.46,0,.46])for(const z of [-.49,.49]){const w=new THREE.Mesh(wheelGeo,darkMat);w.position.set(x,.18,z);w.castShadow=true;rover.add(w);wheels.push(w)}
@@ -223,7 +226,8 @@ async function boot(){
   const roverState={
     x:0,z:0,heading:.35,speed:0,targetSpeed:0,battery:clamp(life.battery||100,0,maxBattery()),state:"THINK",timer:1.2,
     targetZone:null,goal:null,navPurpose:null,prevDist:Infinity,stuckTime:0,recoverSign:1,
-    mastYaw:0,armProgress:0,armVisual:0,scanProgress:0,yawRate:0,wheelAngleL:0,wheelAngleR:0,upgradeChoice:null
+    mastYaw:0,mastPitch:-.08,mastYawTarget:0,mastPitchTarget:-.08,searchPhase:0,
+    armProgress:0,armVisual:0,scanProgress:0,yawRate:0,wheelAngleL:0,wheelAngleR:0,upgradeChoice:null
   };
   if(life.position&&life.position.mapIndex===life.mapIndex){roverState.x=life.position.x;roverState.z=life.position.z;roverState.heading=life.position.heading}
   let running=false,paused=false,lastTime=performance.now(),saveTimer=0;
@@ -234,14 +238,21 @@ async function boot(){
   function exploration(){
     const m=mem();return m.discovered.length/Math.max(1,activeConfig.zones.length);
   }
-  function undiscovered(){const set=new Set(mem().discovered);return zones.filter(z=>!set.has(z.id))}
+  function knownUnexplored(){
+    const m=mem(),seen=new Set(m.seen),done=new Set(m.discovered);
+    return zones.filter(z=>seen.has(z.id)&&!done.has(z.id));
+  }
+  function unseenZones(){
+    const seen=new Set(mem().seen);
+    return zones.filter(z=>!seen.has(z.id));
+  }
 
   function upgradeNeeds(){
     const e=life.exp,c=activeConfig;
     return{
       traction:clamp(c.rough*.46+e.stucks*.16,0,1),
       battery:clamp(e.charges*.18+life.mapIndex*.06+(1-roverState.battery/maxBattery())*.26,0,1),
-      lidar:clamp(undiscovered().length/zones.length*.42+e.scans*.025+life.mapIndex*.06,0,1),
+      lidar:clamp(unseenZones().length/zones.length*.42+e.scans*.025+life.mapIndex*.06,0,1),
       suspension:clamp(c.rough*.42+e.distance/150,0,1),
       arm:clamp(life.samples*.055+e.contacts*.08,0,1),
       solar:clamp(e.charges*.20+life.mapIndex*.05,0,1)
@@ -262,7 +273,7 @@ async function boot(){
   }
 
   function chooseAction(){
-    const m=mem(),exp=exploration(),unknown=undiscovered(),p=life.personality;
+    const m=mem(),exp=exploration(),unknown=knownUnexplored(),unseen=unseenZones(),p=life.personality;
     const options=[];
     if(roverState.battery<32+p.caution*18)options.push({type:"charge",score:65+(maxBattery()-roverState.battery)*.7+p.caution*20,label:"CHARGE"});
     const up=bestUpgradeCandidate();if(up)options.push({type:"upgrade",score:up.score,label:"SELF-UPGRADE",upgrade:up});
@@ -271,6 +282,10 @@ async function boot(){
     for(const z of unknown){
       const d=Math.hypot(z.x-roverState.x,z.z-roverState.z);
       options.push({type:"explore",zone:z,score:38+p.curiosity*34-p.caution*d*1.15+Math.random()*13+(unknown.length<3?6:0),label:"EXPLORE "+z.id});
+    }
+    if(unseen.length){
+      options.push({type:"search",score:42+p.curiosity*42-p.caution*7+Math.random()*9,label:"CAMERA SEARCH"});
+      options.push({type:"wander",score:27+p.curiosity*28+Math.random()*12,label:"WANDER"});
     }
     if(!options.length)options.push({type:"wander",score:30,label:"WANDER"});
     options.sort((a,b)=>b.score-a.score);const pick=options[0],runner=options[1];
@@ -282,7 +297,13 @@ async function boot(){
     if(pick.type==="activate"){navigateToGate("activate");return}
     if(pick.type==="enter"){navigateToGate("enter");return}
     if(pick.type==="explore"){navigateToZone(pick.zone);return}
+    if(pick.type==="search"){startCameraSearch();return}
     const ang=Math.random()*Math.PI*2,rr=rnd(2,6);startNavigation({x:Math.cos(ang)*rr,z:Math.sin(ang)*rr},"wander",null,.60);
+  }
+
+  function startCameraSearch(){
+    roverState.state="SEARCH";roverState.timer=6.4;roverState.searchPhase=0;roverState.speed=0;roverState.yawRate=0;
+    log("camera search · pan/tilt sweep");
   }
 
   function startNavigation(goal,purpose,zone,speed){
@@ -413,10 +434,14 @@ async function boot(){
   }
 
   function updateBehavior(dt,time){
-    if(roverState.state==="THINK"){roverState.timer-=dt;roverState.mastYaw+=dt*.65;if(roverState.timer<=0)chooseAction()}
+    if(roverState.state==="THINK"){roverState.timer-=dt;if(roverState.timer<=0)chooseAction()}
+    else if(roverState.state==="SEARCH"){
+      roverState.timer-=dt;roverState.searchPhase+=dt;
+      if(roverState.timer<=0)think();
+    }
     else if(roverState.state==="NAV")updateNavigation(dt);
     else if(roverState.state==="SCAN"){
-      roverState.timer-=dt;roverState.scanProgress+=dt;roverState.mastYaw=Math.sin(roverState.scanProgress*2.8)*.58;
+      roverState.timer-=dt;roverState.scanProgress+=dt;
       if(roverState.timer<=0)resolveZone();
     }else if(roverState.state==="PICKUP"){
       roverState.timer-=dt;roverState.armProgress=clamp(roverState.armProgress+dt*(has("arm")?.95:.55),0,1);if(roverState.timer<=0)finishPickup();
@@ -445,6 +470,103 @@ async function boot(){
     if(roverState.battery<=3&&roverState.state!=="CHARGE"){startCharge()}
   }
 
+  const PAN_MAX=THREE.MathUtils.degToRad(95),TILT_UP=THREE.MathUtils.degToRad(28),TILT_DOWN=THREE.MathUtils.degToRad(-38);
+  const visionRay=new THREE.Raycaster();
+  let perceptionTimer=0;
+
+  function aimAnglesAt(zone){
+    const dx=zone.x-roverState.x,dz=zone.z-roverState.z;
+    const worldBearing=Math.atan2(dz,dx);
+    const pan=clamp(wrap(roverState.heading-worldBearing),-PAN_MAX,PAN_MAX);
+    const horizontal=Math.max(.1,Math.hypot(dx,dz));
+    const targetY=heightAt(zone.x,zone.z)+(zone.kind==="gate"?1.05:.28);
+    const cameraY=heightAt(roverState.x,roverState.z)+1.16;
+    const tilt=clamp(Math.atan2(targetY-cameraY,horizontal),TILT_DOWN,TILT_UP);
+    return{pan,tilt};
+  }
+
+  function updateMast(dt,time){
+    let pan=0,tilt=-.10;
+    if(roverState.state==="SEARCH"){
+      pan=Math.sin(roverState.searchPhase*1.35)*PAN_MAX;
+      tilt=THREE.MathUtils.degToRad(-8)+Math.sin(roverState.searchPhase*.82+1.1)*THREE.MathUtils.degToRad(18);
+    }else if(roverState.state==="THINK"){
+      pan=Math.sin(time*.00072)*THREE.MathUtils.degToRad(55);
+      tilt=THREE.MathUtils.degToRad(-7)+Math.sin(time*.00051)*THREE.MathUtils.degToRad(8);
+    }else if(["SCAN","PICKUP","CONTACT","ACTIVATE_GATE"].includes(roverState.state)&&roverState.targetZone){
+      const a=aimAnglesAt(roverState.targetZone);pan=a.pan;tilt=a.tilt;
+    }else if(roverState.state==="NAV"){
+      pan=clamp(-roverState.yawRate*.40,-THREE.MathUtils.degToRad(28),THREE.MathUtils.degToRad(28));
+      tilt=THREE.MathUtils.degToRad(-8);
+    }else if(roverState.state==="RECOVER"){
+      pan=roverState.recoverSign*THREE.MathUtils.degToRad(42);tilt=THREE.MathUtils.degToRad(-12);
+    }
+    roverState.mastYawTarget=clamp(pan,-PAN_MAX,PAN_MAX);
+    roverState.mastPitchTarget=clamp(tilt,TILT_DOWN,TILT_UP);
+    const panStep=THREE.MathUtils.degToRad(has("lidar")?125:92)*dt;
+    const tiltStep=THREE.MathUtils.degToRad(68)*dt;
+    const pd=wrap(roverState.mastYawTarget-roverState.mastYaw);
+    roverState.mastYaw=wrap(roverState.mastYaw+clamp(pd,-panStep,panStep));
+    roverState.mastPitch+=clamp(roverState.mastPitchTarget-roverState.mastPitch,-tiltStep,tiltStep);
+  }
+
+  function cameraPose(){
+    rover.updateMatrixWorld(true);
+    const origin=new THREE.Vector3();lens.getWorldPosition(origin);
+    const q=new THREE.Quaternion();mastTilt.getWorldQuaternion(q);
+    const forward=new THREE.Vector3(1,0,0).applyQuaternion(q).normalize();
+    const right=new THREE.Vector3(0,0,1).applyQuaternion(q).normalize();
+    const up=new THREE.Vector3(0,1,0).applyQuaternion(q).normalize();
+    return{origin,forward,right,up};
+  }
+
+  function terrainBlocks(origin,target){
+    const steps=12;
+    for(let i=1;i<steps;i++){
+      const t=i/steps;
+      const x=lerp(origin.x,target.x,t),z=lerp(origin.z,target.z,t),lineY=lerp(origin.y,target.y,t);
+      if(heightAt(x,z)>lineY-.035)return true;
+    }
+    return false;
+  }
+
+  function visibleToCamera(zone){
+    const pose=cameraPose();
+    const target=new THREE.Vector3(zone.x,heightAt(zone.x,zone.z)+(zone.kind==="gate"?1.0:.30),zone.z);
+    const v=target.clone().sub(pose.origin),dist=v.length();
+    const maxRange=has("lidar")?9.2:7.0;
+    if(dist>.15&&dist>maxRange)return false;
+    const f=v.dot(pose.forward),side=v.dot(pose.right),vertical=v.dot(pose.up);
+    if(f<=.08)return false;
+    const hAng=Math.abs(Math.atan2(side,f)),vAng=Math.abs(Math.atan2(vertical,f));
+    if(hAng>THREE.MathUtils.degToRad(32)||vAng>THREE.MathUtils.degToRad(23))return false;
+    if(terrainBlocks(pose.origin,target))return false;
+    for(const o of obstacles){
+      if(o.zoneId===zone.id)continue;
+      const ox=o.x-pose.origin.x,oz=o.z-pose.origin.z;
+      const tx=zone.x-pose.origin.x,tz=zone.z-pose.origin.z;
+      const len2=tx*tx+tz*tz;if(len2<.001)continue;
+      const u=clamp((ox*tx+oz*tz)/len2,0,1);
+      const px=pose.origin.x+tx*u,pz=pose.origin.z+tz*u;
+      if(u<.97&&Math.hypot(o.x-px,o.z-pz)<o.rad*.72)return false;
+    }
+    return true;
+  }
+
+  function updatePerception(dt){
+    perceptionTimer-=dt;if(perceptionTimer>0)return;perceptionTimer=.16;
+    const m=mem();
+    for(const z of zones){
+      if(m.seen.includes(z.id))continue;
+      if(visibleToCamera(z)){
+        m.seen.push(z.id);
+        log("visual contact · "+z.id+" · "+z.label);
+        decisionBadge.textContent="SEEN · "+z.id;
+        saveLife();
+      }
+    }
+  }
+
   function updatePose(dt,time){
     const x=roverState.x,z=roverState.z,fwd={x:Math.cos(roverState.heading),z:Math.sin(roverState.heading)},side={x:-fwd.z,z:fwd.x};
     const front=heightAt(x+fwd.x*.5,z+fwd.z*.5),back=heightAt(x-fwd.x*.5,z-fwd.z*.5),left=heightAt(x+side.x*.42,z+side.z*.42),right=heightAt(x-side.x*.42,z-side.z*.42);
@@ -453,6 +575,7 @@ async function boot(){
     rover.rotation.order="YXZ";rover.rotation.y=-roverState.heading;rover.rotation.x=Math.atan2(front-back,1)*suspensionFactor;rover.rotation.z=Math.atan2(right-left,.84)*suspensionFactor;
     wheels.forEach(w=>{w.rotation.z=w.position.z>0?roverState.wheelAngleL:roverState.wheelAngleR});
     mast.rotation.y=roverState.mastYaw;
+    mastTilt.rotation.z=roverState.mastPitch;
     lidarHead.rotation.y=time*.004;
     roverState.armVisual+=(roverState.armProgress-roverState.armVisual)*(1-Math.exp(-dt*4.2));
     const p=roverState.armVisual||0,e=p*p*(3-2*p);armBase.rotation.y=-.35+.42*e;shoulder.rotation.z=-(.18+1.05*e);elbow.rotation.z=.12+1.35*e;wrist.rotation.z=-(.05+.42*e);
@@ -465,7 +588,8 @@ async function boot(){
   function activityCopy(){
     const z=roverState.targetZone,d=z?Math.hypot(z.x-roverState.x,z.z-roverState.z):0;
     switch(roverState.state){
-      case"THINK":return["次に何をするか考えています。","探索・改造・充電・ゲート移動を比較しています。"];
+      case"THINK":return["次に何をするか考えています。","カメラで実際に見た記憶だけを使って候補を比較しています。"];
+      case"SEARCH":return["カメラで周囲を探索しています。","パンとチルトを使い、視野に入った物だけを新しく認識します。"];
       case"NAV":return[roverState.navPurpose==="explore"?"未知領域へ移動中。":roverState.navPurpose==="activate"?"ゲートへ戻っています。":roverState.navPurpose==="enter"?"次の世界へ向かっています。":"自由移動中。",z?"目標まで "+d.toFixed(1)+" m。":"経路を調整しています。"];
       case"SCAN":return["現地を詳しく調べています。","見つけた物が何なのか判別しています。"];
       case"PICKUP":return["見つけた物を回収しています。","将来何に使えるかは、まだ決めていません。"];
@@ -485,7 +609,7 @@ async function boot(){
     stateText.textContent=roverState.state;activityText.textContent=a;detailText.textContent=b;
     batteryText.textContent="BATTERY "+Math.round(roverState.battery/maxBattery()*100)+"%";speedText.textContent="SPEED "+Math.abs(roverState.speed).toFixed(2)+" m/s";
     partsText.textContent="PARTS "+life.parts;sampleText.textContent="SAMPLES "+life.samples;exploreText.textContent="EXPLORED "+pct+"%";
-    headingText.textContent="Heading "+Math.round((roverState.heading*180/Math.PI+360)%360)+"°";updateMapUI();
+    headingText.textContent="H "+Math.round((roverState.heading*180/Math.PI+360)%360)+"° · P "+Math.round(THREE.MathUtils.radToDeg(roverState.mastYaw))+"° · T "+Math.round(THREE.MathUtils.radToDeg(roverState.mastPitch))+"°";updateMapUI();
     const P=life.personality;
     curiosityFill.style.width=Math.round(P.curiosity*100)+"%";cautionFill.style.width=Math.round(P.caution*100)+"%";improveFill.style.width=Math.round(P.improve*100)+"%";
     curiosityText.textContent=Math.round(P.curiosity*100);cautionText.textContent=Math.round(P.caution*100);improveText.textContent=Math.round(P.improve*100);
@@ -498,7 +622,9 @@ async function boot(){
     const dir=new THREE.Vector3(Math.cos(roverState.heading),0,Math.sin(roverState.heading)),side=new THREE.Vector3(-dir.z,0,dir.x),baseY=heightAt(roverState.x,roverState.z);
     if(viewMode==="overview"){camDesired.set(7.5,10.5,10.2);camTarget.set(0,0,0)}
     else if(viewMode==="follow"){camDesired.set(roverState.x-dir.x*3.3+side.x*.95,baseY+2.15,roverState.z-dir.z*3.3+side.z*.95);camTarget.set(roverState.x+dir.x*.9,baseY+.45,roverState.z+dir.z*.9)}
-    else if(viewMode==="rovercam"){camDesired.set(roverState.x+dir.x*.30,baseY+1.18,roverState.z+dir.z*.30);const a=roverState.heading-roverState.mastYaw;camTarget.set(roverState.x+Math.cos(a)*7,baseY+.95,roverState.z+Math.sin(a)*7)}
+    else if(viewMode==="rovercam"){
+      const pose=cameraPose();camDesired.copy(pose.origin);camTarget.copy(pose.origin).addScaledVector(pose.forward,7);
+    }
     else{const tip=new THREE.Vector3(.12,0,0);wrist.localToWorld(tip);camDesired.copy(tip).add(new THREE.Vector3(0,.08,0));if(roverState.targetZone)camTarget.set(roverState.targetZone.x,heightAt(roverState.targetZone.x,roverState.targetZone.z)+.35,roverState.targetZone.z);else camTarget.copy(tip).add(dir)}
     const k=viewMode==="overview"?2.3:(viewMode==="follow"?4.2:8.0);camera.position.lerp(camDesired,1-Math.exp(-dt*k));
     const now=new THREE.Vector3();camera.getWorldDirection(now);now.multiplyScalar(2).add(camera.position);now.lerp(camTarget,1-Math.exp(-dt*k));camera.lookAt(now);
@@ -526,8 +652,11 @@ async function boot(){
 
   function animate(time){
     const dt=Math.min(.035,Math.max(0,(time-lastTime)/1000||.016));lastTime=time;
-    if(running&&!paused){updateBehavior(dt,time);updatePose(dt,time);animateWorld(time);updateCamera(dt);updateUI();saveTimer+=dt;if(saveTimer>6){saveTimer=0;saveLife()}}
-    else{updatePose(dt*.2,time);animateWorld(time);updateCamera(dt*.25)}
+    if(running&&!paused){
+      updateBehavior(dt,time);updateMast(dt,time);updatePose(dt,time);updatePerception(dt);animateWorld(time);updateCamera(dt);updateUI();
+      saveTimer+=dt;if(saveTimer>6){saveTimer=0;saveLife()}
+    }
+    else{updateMast(dt*.2,time);updatePose(dt*.2,time);animateWorld(time);updateCamera(dt*.25)}
     renderer.render(scene,camera);
   }
   renderer.setAnimationLoop(animate);
