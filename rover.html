@@ -42,23 +42,9 @@
       </div>
 
       <div class="stage-wrap">
-        <canvas id="roverCanvas" width="960" height="600" aria-label="自律ロボットがMinecraft風ブロック世界で素材探索・自己改造・ポータル移動を行う3D世界"></canvas>
-        <div id="viewBadge" class="view-badge">OVERVIEW</div>
+        <canvas id="roverCanvas" width="960" height="600" aria-label="自律ロボットがMinecraft風ブロック世界で素材探索・自己改造・ポータル移動を行う2D Canvas世界"></canvas>
+        <div id="viewBadge" class="view-badge">WORLD</div>
         <div id="decisionBadge" class="decision-badge">THINKING…</div>
-
-        <div id="scopeOverlay" class="scope-overlay" hidden aria-hidden="true">
-          <div class="scope-center" aria-hidden="true"></div>
-          <div id="scopeDetections" class="scope-detections" aria-hidden="true"></div>
-          <div id="scopeReticle" class="scope-reticle">
-            <span class="scope-corner tl"></span><span class="scope-corner tr"></span>
-            <span class="scope-corner bl"></span><span class="scope-corner br"></span>
-            <i></i>
-          </div>
-          <div id="scopeReadout" class="scope-readout">
-            <strong id="scopeTarget">SEARCHING</strong>
-            <span id="scopeDistance">NO VISUAL CONTACT</span>
-          </div>
-        </div>
 
         <div id="intro" class="intro">
           <div class="intro-panel">
@@ -90,7 +76,7 @@
 
         <div class="view-status">
           <span>CAMERA</span>
-          <strong id="viewName">OVERVIEW</strong>
+          <strong id="viewName">WORLD</strong>
           <small id="headingText">Heading —</small>
         </div>
       </div>
@@ -116,7 +102,7 @@
       <div class="actions">
         <button id="viewButton" type="button">
           <strong>VIEW</strong>
-          <span>OVERVIEW → FOLLOW → ROVER CAM → ARM CAM</span>
+          <span>WORLD → FOLLOW → BOT CAM</span>
         </button>
         <button id="lightButton" type="button">
           <strong>LIGHT</strong>
