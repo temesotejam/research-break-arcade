@@ -72,19 +72,20 @@
 
 公開ページ: `orbit.html`
 
-## Quiet Mode — Pocket Pond
+## Quiet Mode — Quiet Koi
 
-目的・スコア・ゲームオーバーのない観察用ミニ池です。
+1匹の鯉だけを観察する、目的・スコア・ゲームオーバーのない静かなモードです。
 
-- 魚が自律的に泳ぐ
-- カエルが睡蓮の葉を移動する
-- トンボが水面上を飛ぶ
-- カメがときどき顔を出す
-- 夕暮れから夜にかけてホタルが現れる
-- FEED / RAIN / DUSK で景色に少しだけ介入できる
-- 水面タップで波紋を作り、近くの魚を寄せられる
-- VIEWで POND / FISH POV / FROG POV / DRAGONFLY POV を切り替え
-- FISH POV は魚に追従し、進行方向を画面上方向へ固定
+- 動く生き物は鯉1匹だけ
+- 慣性を持った旋回と加減速
+- 速度に応じた尾びれ・胴体の動き
+- 水面付近 / 深場を自律的に行き来する
+- 壁際では自然に向きを変える
+- 水面光、影、底石、コースティクスで池を表現
+- VIEWで POND / FOLLOW / KOI POV を切り替え
+- KOI POV は鯉の進行方向から見た疑似一人称水中視点
+- COME HERE で水面に1回だけ刺激を与え、鯉の注意を向けられる
+- LIGHT で午後 / 夕方 / 曇天の光を切り替え
 - 時間制限なし、スコアなし
 
 公開ページ: `pond.html`
@@ -120,6 +121,6 @@
 - `orbit.html` — Orbit Sling UI
 - `orbit.css` — Orbit Sling デザイン
 - `orbit.js` — Orbit Sling ゲームロジック / Canvas描画
-- `pond.html` — Pocket Pond UI
-- `pond.css` — Pocket Pond デザイン
-- `pond.js` — Pocket Pond 生態シミュレーション / POVカメラ
+- `pond.html` — Quiet Koi UI
+- `pond.css` — Quiet Koi デザイン
+- `pond.js` — 1匹の鯉の行動シミュレーション / FOLLOW・KOI POVカメラ
