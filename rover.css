@@ -35,3 +35,7 @@
 .detection-label.unknown{color:#f1d19c;border-left-color:rgba(232,184,116,.9)}
 .detection-label small{display:block;margin-top:2px;color:rgba(205,232,226,.62);font-size:7px;font-weight:600}
 @media(max-width:760px){.detection-box{width:58px;height:38px}.detection-label{top:-30px;font-size:8px;max-width:105px}}
+
+#missionText{display:block;color:#f3d2a8;font-size:14px;letter-spacing:.01em}
+#missionStepText{display:block;margin-top:3px;color:#c8b39f;font-size:10px;line-height:1.45}
+.activity-divider{height:1px;margin:9px 0 8px;background:var(--line)}
