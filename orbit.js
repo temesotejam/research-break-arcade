@@ -31,9 +31,9 @@
   const W = canvas.width;
   const H = canvas.height;
   const SESSION_SECONDS = 90;
-  const BOOST_COST = 22;
+  const BOOST_COST = 20;
   const BOOST_DV = 24;
-  const BOOST_REWARD = 36;
+  const BOOST_REWARD = 48;
   const PLANET_NAMES = ["Astra", "Nox", "Lyra", "Vela", "Mira", "Ceres", "Io", "Rhea", "Nova", "Eos"];
   const PLANET_COLORS = ["#8fb8ff", "#d5a4ff", "#f0b47d", "#8fe8cf", "#e58ca8", "#a8c97e"];
 
@@ -65,6 +65,7 @@
   let recoveryTimer = 0;
   let prediction = null;
   let calloutTimer = 0;
+  let pausedFrom = "playing";
 
   bestValue.textContent = best.toLocaleString("ja-JP");
 
@@ -112,7 +113,7 @@
     recoveryTimer = 0;
     sessionEnd = performance.now() + SESSION_SECONDS * 1000;
     pausedAt = 0;
-    state = "playing";
+    state = pausedFrom === "recovering" ? "recovering" : "playing";
     hideOverlay();
     spawnTarget(true);
     updateHud();
@@ -127,18 +128,18 @@
 
     const distance = randomBetween(first ? 275 : 255, first ? 295 : 285);
     const side = Math.random() < .5 ? -1 : 1;
-    const offset = side * randomBetween(47, 61);
-    const radius = randomBetween(24, 32);
-    const mu = clamp(145000 * Math.pow(speed / 95, 2), 105000, 310000);
+    const offset = side * randomBetween(52, 66);
+    const radius = randomBetween(24, 31);
+    const mu = clamp(140000 * Math.pow(speed / 95, 2), 105000, 280000);
 
     target = {
       x: ship.x + dirX * distance + perpX * offset,
       y: ship.y + dirY * distance + perpY * offset,
       radius,
       mu,
-      safeMin: radius + 15,
-      safeMax: radius + 61,
-      ideal: radius + 31,
+      safeMin: radius + 13,
+      safeMax: radius + 63,
+      ideal: radius + 32,
       color: PLANET_COLORS[Math.floor(Math.random() * PLANET_COLORS.length)],
       name: PLANET_NAMES[Math.floor(Math.random() * PLANET_NAMES.length)]
     };
@@ -305,6 +306,12 @@
     score += gain;
     slings += 1;
     boost = Math.min(100, boost + BOOST_REWARD);
+
+    const exitSpeed = Math.hypot(ship.vx, ship.vy);
+    const settledSpeed = clamp(exitSpeed * .86, 92, 120);
+    ship.vx = ship.vx / exitSpeed * settledSpeed;
+    ship.vy = ship.vy / exitSpeed * settledSpeed;
+
     saveBest(score);
 
     oldPlanets.push({ ...target, life: 1 });
@@ -472,6 +479,7 @@
 
   function togglePause() {
     if (state === "playing" || state === "recovering") {
+      pausedFrom = state;
       state = "paused";
       pausedAt = performance.now();
       pauseButton.textContent = "RESUME";
