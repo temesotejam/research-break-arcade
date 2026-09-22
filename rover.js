@@ -174,7 +174,8 @@ function terrainHeight(x,z){
 
 function buildWorld(){
   config=mapConfig(life.mapIndex);
-  zones=config.zones.map(z=>({...z}));
+  const discovered=new Set(mem().discovered);
+  zones=config.zones.map(z=>({...z,taken:discovered.has(z.id)&&(z.kind==="parts"||z.kind==="core")}));
   ambient=[];
   obstacles=[];
   const rand=seeded(4400+life.mapIndex*991);
@@ -742,11 +743,9 @@ function renderWorld(close){
   ctx.strokeStyle="rgba(126,220,195,.30)";ctx.lineWidth=1;
   for(const a of [b-FOV*.5,b,b+FOV*.5]){
     const p=worldToScreen(bot.x+Math.cos(a)*6,bot.z+Math.sin(a)*6,terrainHeight(bot.x,bot.z),centerX,centerZ,scale);
-    ctx.beginPath();ctx.moveTo(origin.x,origin.y-s(0));ctx.lineTo(p.x,p.y);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(origin.x,origin.y);ctx.lineTo(p.x,p.y);ctx.stroke();
   }
 }
-function s(v){return v}
-
 function renderBotCam(){
   const sky=LIGHTS[lightIndex].name==="NIGHT"?"#162132":config.sky;
   ctx.fillStyle=sky;ctx.fillRect(0,0,canvas.width,canvas.height*.52);
@@ -801,9 +800,7 @@ function setLight(i){lightIndex=i;lightLabel.textContent=LIGHTS[i].name}
 
 function resize(){
   const rect=canvas.getBoundingClientRect();
-  const w=Math.max(320,Math.round(rect.width||960)),h=Math.round(w*600/960),dpr=Math.min(devicePixelRatio||1,1.5);
-  canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);
-  ctx.setTransform(dpr,0,0,dpr,0,0);
+  const w=Math.max(320,Math.round(rect.width||960)),h=Math.round(w*600/960);
   canvas.width=w;canvas.height=h;
 }
 window.addEventListener("resize",resize);
