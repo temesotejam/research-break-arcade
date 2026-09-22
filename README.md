@@ -72,57 +72,33 @@
 
 公開ページ: `orbit.html`
 
-## Autonomous Mode — Tiny Rover
+## Autonomous Mode — Tiny Bot / Minecraft World
 
-1台の小型探査ローバーを「操作する」のではなく、ロボット自身の判断と成長を観察する永続型シミュレーションです。
+Minecraft風のブロック世界で、1台の自律ロボットが素材を集め、自分を改造し、ポータルから次のディメンションへ進む観察型シミュレーションです。
 
-- 動く主体はローバー1台だけ
-- Three.js 0.186.0 を固定利用した3D WebGL描画
-- CURIOSITY / CAUTION / SELF-IMPROVE の性格値を個体ごとに生成
-- 高レベルMISSIONを自律選択し、そのMISSIONを複数ステップに分解して継続実行
-- INVESTIGATE / BUILD UPGRADE / OPEN THE GATE / CROSS THE GATE / SURVEY UNMAPPED SECTOR を目的として選択
-- 移動はMISSION達成のための手段とし、NEW VIEWPOINT単体を目的として選ばない
-- BUILD UPGRADEでは不足部品を探す → 回収 → 自己改造まで同じMISSIONを維持
-- OPEN THE GATEではゲート探索 / キーアイテム探索 / 運搬 / 起動を1つのMISSIONとして継続
-- SURVEYは2〜4個の観測地点という明確な完了条件を持ち、新規異常を発見するとINVESTIGATEへ切り替える
-- MISSIONはLocal Storageへ保存し、ページを開き直しても目的を維持
-- 未発見物の座標は意思決定に使用せず、マストカメラの実視野に入った物だけを新規認識
-- マストカメラは約±95°パン、上28° / 下72°チルトで自律走査
-- 停止して繰り返す CAMERA SEARCH 状態は廃止
-- 未発見物が残っている場合は走行履歴から未踏区画を選び、次の観測地点へ自律移動
-- 1マップは約64 m角。主要対象の配置間隔も旧版の約3倍に拡大
-- 移動中に足元・前輪前方・遠方をパン / チルトで交互に走査
-- 新しい対象を視認した瞬間に移動を止め、次の行動を再判断
-- 既に見つけた未調査対象がある場合は、さらに移動探索するより先にその対象の調査を優先
-- 認識はカメラFOV・距離・地形遮蔽・岩による遮蔽を通った対象だけ
-- ROVER CAMは3D上の実レンズ位置・パン・チルト姿勢と完全同期
-- ROVER CAMでは現在注目している対象へターゲットスコープと距離を表示
-- カメラ内の主要物体と一定以上の大きさの背景石に物体認識枠を表示
-- 中心点1個ではなく、3Dバウンディングボックスを画面へ投影して画面内の見え方を評価
-- 物体上の複数サンプル点へレイを飛ばし、地形や別物体による遮蔽率を評価
-- 画面占有率・遮蔽率・距離・画面内残存率から認識信頼度を算出
-- 信頼度が低い、または未識別の物体は `?` と表示し、認識枠に信頼度%を表示
-- 十分に見えた岩は ROCK、調査後は SALVAGE / ARTIFACT / STRUCTURE と分類
-- ローバーの基準高さを車輪接地点に修正し、地面から浮いて見える問題を修正
-- SCAN / PICKUP / CONTACT / ゲート操作は対象が実カメラで見えている間だけ進行
-- 失敗回数・充電回数・走行距離・調査経験から「今の自分に何が足りないか」を評価
-- TRACTION WHEELS / AUX BATTERY / LIDAR / ACTIVE SUSPENSION / ARM TOOL / SOLAR BOOST を自分で選んで装着
-- 改造は3Dモデルの外見にも反映
-- 岩や廃部品、マップ固有のキーアイテムを探索・回収
-- キーアイテムと以前見つけたゲートの関係を自分で試し、ゲートを起動
-- ゲート起動後も、残りの探索を続けるか次マップへ進むかを性格と探索率から自分で判断
-- MAP 01 RED BASIN → MAP 02 GLASS HOLLOW → MAP 03 ANCIENT RELAY → 以降は FRONTIER を自動生成
-- 進行、性格、記憶、アップグレード、現在位置を Local Storage に保存
-- 岩を先読みして回避し、進めない時は自動でバックして経路復帰
-- 地形の傾斜に合わせて車体がピッチ・ロール
-- 6輪の左右回転速度は旋回角速度に応じて個別計算
-- VIEWで OVERVIEW / FOLLOW / ROVER CAM / ARM CAM を切り替え
-- NEW LIFE を押した場合のみ、性格・記憶・改造をすべて初期化
-- 時間制限なし、スコアなし
+- 最大目標は **SELF EVOLUTION** と **REACH NEXT DIMENSION** の2つだけ
+- 移動・物体調査・採掘・充電は、2つの最大目標を進めるための下位行動
+- OVERWORLD PLAINS → NETHER WASTES → THE END → 以降はMinecraft風チャンクを継続生成
+- 約64 m角のブロック世界
+- 草ブロック、土、木、石、鉱石、ネザー柱、コーラス系構造、黒曜石ポータルを軽量3Dで表現
+- IRON / REDSTONE / QUARTZ / GOLD などを見つけて材料として回収
+- IRON TREADS / REDSTONE CELL / AMETHYST SCANNER / SLIME SUSPENSION / DIAMOND TOOL / DAYLIGHT ARRAY を自分で選んで装着
+- ポータルフレームと起動アイテムをカメラで探し、発見・回収・起動・通過まで自律実行
+- マストカメラはパン約±95°、チルト上28° / 下72°
+- カメラに映った物だけを新規認識し、未発見物の座標を意思決定には使用しない
+- 3Dバウンディングボックス投影、画面占有率、距離、複数点遮蔽判定から認識信頼度を算出
+- ROVER CAMでは検出枠、分類名、認識信頼度、距離を表示
+- 十分に分からない物体は `?`
+- 調査後は STONE / IRON ORE / REDSTONE ORE / FLINT & STEEL / NETHER PORTAL などMinecraft側の分類名へ更新
+- 木や一定サイズ以上の背景ブロックも視覚認識対象
+- カメラで対象が見えている間だけ解析・採掘・ポータル操作が進行
+- 進行、性格、MISSION、改造、材料、現在位置を Local Storage に保存
+- NEW LIFE でのみ自律個体を完全初期化
+- 時間制限・スコアなし
 
 公開ページ: `rover.html`
 
-旧 `pond.html` は Tiny Rover へリダイレクトします。
+旧 `pond.html` は Tiny Bot へリダイレクトします。
 
 ## Run locally
 
@@ -157,5 +133,5 @@
 - `orbit.js` — Orbit Sling ゲームロジック / Canvas描画
 - `rover.html` — Tiny Rover UI
 - `rover.css` — Tiny Rover デザイン
-- `rover.js` — Tiny Rover 自律意思決定 / 自己改造 / マップ進行 / 永続化 / 3Dフィールド
+- `rover.js` — Tiny Bot MISSION / 自己改造 / ポータル進行 / 視覚認識 / ボクセル世界
 - `pond.html` — Tiny Rover への互換リダイレクト
