@@ -281,7 +281,7 @@ async function boot(){
       n++;
     }
     tops.receiveShadow=true;soils.receiveShadow=true;worldGroup.add(soils,tops);
-    tops.userData.isTerrain=true;soils.userData.isTerrain=true;registerOccluder(tops,null);registerOccluder(soils,null);
+    tops.userData.isTerrain=true;soils.userData.isTerrain=true;
 
     // Biome-specific ambient voxel landmarks.
     const ambientCount=activeConfig.biome==="overworld"?24:18;
@@ -765,7 +765,7 @@ async function boot(){
     life.mapIndex++;life.personality.curiosity=clamp(life.personality.curiosity+.01,.25,.98);life.personality.caution=clamp(life.personality.caution-.006,.22,.95);
     life.position=null;life.currentMission=null;roverState.mission=null;
     roverState.x=0;roverState.z=0;roverState.heading=rnd(-Math.PI,Math.PI);roverState.speed=0;roverState.targetZone=null;
-    buildWorld();roverState.battery=Math.min(maxBattery(),roverState.battery+12);applyUpgradeVisuals();log("new world · "+activeConfig.name.toLowerCase());saveLife();think();
+    buildWorld();roverState.battery=Math.min(maxBattery(),roverState.battery+12);applyUpgradeVisuals();log("entered dimension · "+activeConfig.name.toLowerCase());saveLife();think();
   }
 
   function selfWorkVisible(){
@@ -943,7 +943,20 @@ async function boot(){
     ];
   }
 
+  function terrainOccludes(origin,point){
+    const dx=point.x-origin.x,dz=point.z-origin.z,dy=point.y-origin.y;
+    const horizontal=Math.hypot(dx,dz);
+    const steps=clamp(Math.ceil(horizontal/.65),4,28);
+    for(let i=1;i<steps;i++){
+      const t=i/steps;
+      const x=origin.x+dx*t,z=origin.z+dz*t,lineY=origin.y+dy*t;
+      if(heightAt(x,z)>lineY-.05)return true;
+    }
+    return false;
+  }
+
   function rayVisible(owner,origin,point){
+    if(terrainOccludes(origin,point))return false;
     const v=point.clone().sub(origin),dist=v.length();
     if(dist<.08)return true;
     sensorRay.set(origin,v.normalize());sensorRay.near=.03;sensorRay.far=dist+.05;
@@ -951,7 +964,6 @@ async function boot(){
     if(!hits.length)return true;
     const first=hits[0];
     if(first.object.userData.visualOwner===owner)return true;
-    if(first.object.userData.isTerrain&&Math.abs(first.distance-dist)<.16)return true;
     return false;
   }
 
@@ -1073,7 +1085,7 @@ async function boot(){
       case"NAV":return[
         roverState.navPurpose==="explore"?"見つけた対象へ移動中。":
         roverState.navPurpose==="activate"?"ポータルへ戻っています。":
-        roverState.navPurpose==="enter"?"次の世界へ向かっています。":
+        roverState.navPurpose==="enter"?"次のディメンションへ向かっています。":
         roverState.navPurpose==="frontier"?"最大目標を進めるため探索移動中。":"自由移動中。",
         roverState.navPurpose==="frontier"?"改造材料または次のディメンションへの手掛かりを探しながら走行しています。":(z?"目標まで "+d.toFixed(1)+" m。":"経路を調整しています。")
       ];
@@ -1081,7 +1093,7 @@ async function boot(){
       case"PICKUP":return["見つけた物を回収しています。","将来何に使えるかは、まだ決めていません。"];
       case"CONTACT":return["対象へ接触調査しています。","アームで表面を測定しています。"];
       case"UPGRADE":return["自分自身を改造しています。",roverState.upgradeChoice?roverState.upgradeChoice.label+" を取り付けています。":"部品を組み替えています。"];
-      case"ACTIVATE_GATE":return["未知のアイテムをポータルへ接続中。","以前見つけた構造物との関係を試しています。"];
+      case"ACTIVATE_GATE":return["ポータルを起動しています。",(activeConfig.core||"キーアイテム")+" を使ってフレームを起動しています。"];
       case"CHARGE":return["充電のため停止しています。","危険を取らず、行動可能時間を回復しています。"];
       case"RECOVER":return["経路から自力で脱出中。","後退して別の進入角を作っています。"];
       case"TRANSIT":return["ポータルを通過しています。","戻るかどうかは分からないまま次のディメンションへ進みます。"];
