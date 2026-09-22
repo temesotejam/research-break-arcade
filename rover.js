@@ -11,6 +11,7 @@ async function boot(){
   const activityText=$("activityText"),detailText=$("detailText"),batteryText=$("batteryText"),speedText=$("speedText");
   const partsText=$("partsText"),sampleText=$("sampleText"),exploreText=$("exploreText"),headingText=$("headingText");
   const lightLabel=$("lightLabel"),logList=$("logList"),upgradeList=$("upgradeList"),inventoryList=$("inventoryList");
+  const scopeOverlay=$("scopeOverlay"),scopeReticle=$("scopeReticle"),scopeTarget=$("scopeTarget"),scopeDistance=$("scopeDistance");
   const curiosityFill=$("curiosityFill"),cautionFill=$("cautionFill"),improveFill=$("improveFill");
   const curiosityText=$("curiosityText"),cautionText=$("cautionText"),improveText=$("improveText");
 
@@ -310,7 +311,12 @@ async function boot(){
     roverState.goal=goal;roverState.navPurpose=purpose;roverState.targetZone=zone;roverState.state="NAV";roverState.targetSpeed=speed;
     roverState.prevDist=Infinity;roverState.stuckTime=0;
   }
-  function navigateToZone(z){startNavigation({x:z.x,z:z.z},"explore",z,has("suspension")?.88:.70);log("frontier selected · "+z.id)}
+  function navigateToZone(z){
+    const dx=roverState.x-z.x,dz=roverState.z-z.z,d=Math.max(.001,Math.hypot(dx,dz));
+    const stand=z.kind==="gate"?1.65:(z.kind==="geology"?1.28:.95);
+    startNavigation({x:z.x+dx/d*stand,z:z.z+dz/d*stand},"explore",z,has("suspension")?.88:.70);
+    log("frontier selected · "+z.id);
+  }
   function gateZone(){return zones.find(z=>z.kind==="gate")}
   function navigateToGate(purpose){
     const g=gateZone();if(!g){think();return}
@@ -441,7 +447,8 @@ async function boot(){
     }
     else if(roverState.state==="NAV")updateNavigation(dt);
     else if(roverState.state==="SCAN"){
-      roverState.timer-=dt;roverState.scanProgress+=dt;
+      const canSee=roverState.targetZone&&visibleToCamera(roverState.targetZone);
+      if(canSee){roverState.timer-=dt;roverState.scanProgress+=dt;}
       if(roverState.timer<=0)resolveZone();
     }else if(roverState.state==="PICKUP"){
       roverState.timer-=dt;roverState.armProgress=clamp(roverState.armProgress+dt*(has("arm")?.95:.55),0,1);if(roverState.timer<=0)finishPickup();
@@ -471,8 +478,8 @@ async function boot(){
   }
 
   const PAN_MAX=THREE.MathUtils.degToRad(95),TILT_UP=THREE.MathUtils.degToRad(28),TILT_DOWN=THREE.MathUtils.degToRad(-38);
-  const visionRay=new THREE.Raycaster();
-  let perceptionTimer=0;
+  const CAMERA_VFOV=THREE.MathUtils.degToRad(46);
+  let perceptionTimer=0,attentionZone=null;
 
   function aimAnglesAt(zone){
     const dx=zone.x-roverState.x,dz=zone.z-roverState.z;
@@ -539,7 +546,8 @@ async function boot(){
     const f=v.dot(pose.forward),side=v.dot(pose.right),vertical=v.dot(pose.up);
     if(f<=.08)return false;
     const hAng=Math.abs(Math.atan2(side,f)),vAng=Math.abs(Math.atan2(vertical,f));
-    if(hAng>THREE.MathUtils.degToRad(32)||vAng>THREE.MathUtils.degToRad(23))return false;
+    const hHalf=Math.atan(Math.tan(CAMERA_VFOV*.5)*camera.aspect);
+    if(hAng>hHalf||vAng>CAMERA_VFOV*.5)return false;
     if(terrainBlocks(pose.origin,target))return false;
     for(const o of obstacles){
       if(o.zoneId===zone.id)continue;
@@ -553,18 +561,33 @@ async function boot(){
     return true;
   }
 
+  function attentionScore(zone){
+    const pose=cameraPose();
+    const target=new THREE.Vector3(zone.x,heightAt(zone.x,zone.z)+(zone.kind==="gate"?1.0:.30),zone.z);
+    const v=target.sub(pose.origin),dist=v.length();
+    const f=v.dot(pose.forward),side=v.dot(pose.right),vertical=v.dot(pose.up);
+    if(f<=0)return Infinity;
+    return Math.hypot(Math.atan2(side,f),Math.atan2(vertical,f))+.008*dist;
+  }
+
   function updatePerception(dt){
-    perceptionTimer-=dt;if(perceptionTimer>0)return;perceptionTimer=.16;
+    perceptionTimer-=dt;if(perceptionTimer>0)return;perceptionTimer=.12;
     const m=mem();
+    const visible=[];
     for(const z of zones){
-      if(m.seen.includes(z.id))continue;
+      if(z.mesh&&z.mesh.visible===false)continue;
       if(visibleToCamera(z)){
-        m.seen.push(z.id);
-        log("visual contact · "+z.id+" · "+z.label);
-        decisionBadge.textContent="SEEN · "+z.id;
-        saveLife();
+        visible.push(z);
+        if(!m.seen.includes(z.id)){
+          m.seen.push(z.id);
+          log("visual contact · "+z.id+" · "+z.label);
+          decisionBadge.textContent="SEEN · "+z.id;
+          saveLife();
+        }
       }
     }
+    visible.sort((a,b)=>attentionScore(a)-attentionScore(b));
+    attentionZone=visible[0]||null;
   }
 
   function updatePose(dt,time){
@@ -620,15 +643,54 @@ async function boot(){
 
   function updateCamera(dt){
     const dir=new THREE.Vector3(Math.cos(roverState.heading),0,Math.sin(roverState.heading)),side=new THREE.Vector3(-dir.z,0,dir.x),baseY=heightAt(roverState.x,roverState.z);
+
+    if(viewMode==="rovercam"){
+      const pose=cameraPose();
+      camera.position.copy(pose.origin);
+      camera.up.copy(pose.up);
+      camTarget.copy(pose.origin).addScaledVector(pose.forward,7);
+      camera.lookAt(camTarget);
+      camera.fov=THREE.MathUtils.radToDeg(CAMERA_VFOV);
+      camera.updateProjectionMatrix();
+      return;
+    }
+
+    camera.up.set(0,1,0);
     if(viewMode==="overview"){camDesired.set(7.5,10.5,10.2);camTarget.set(0,0,0)}
     else if(viewMode==="follow"){camDesired.set(roverState.x-dir.x*3.3+side.x*.95,baseY+2.15,roverState.z-dir.z*3.3+side.z*.95);camTarget.set(roverState.x+dir.x*.9,baseY+.45,roverState.z+dir.z*.9)}
-    else if(viewMode==="rovercam"){
-      const pose=cameraPose();camDesired.copy(pose.origin);camTarget.copy(pose.origin).addScaledVector(pose.forward,7);
-    }
     else{const tip=new THREE.Vector3(.12,0,0);wrist.localToWorld(tip);camDesired.copy(tip).add(new THREE.Vector3(0,.08,0));if(roverState.targetZone)camTarget.set(roverState.targetZone.x,heightAt(roverState.targetZone.x,roverState.targetZone.z)+.35,roverState.targetZone.z);else camTarget.copy(tip).add(dir)}
-    const k=viewMode==="overview"?2.3:(viewMode==="follow"?4.2:8.0);camera.position.lerp(camDesired,1-Math.exp(-dt*k));
+    const k=viewMode==="overview"?2.3:(viewMode==="follow"?4.2:8.0);
+    camera.position.lerp(camDesired,1-Math.exp(-dt*k));
     const now=new THREE.Vector3();camera.getWorldDirection(now);now.multiplyScalar(2).add(camera.position);now.lerp(camTarget,1-Math.exp(-dt*k));camera.lookAt(now);
-    const f=viewMode==="rovercam"?58:(viewMode==="armcam"?54:48);camera.fov+=(f-camera.fov)*(1-Math.exp(-dt*3));camera.updateProjectionMatrix();
+    const f=viewMode==="armcam"?54:48;camera.fov+=(f-camera.fov)*(1-Math.exp(-dt*3));camera.updateProjectionMatrix();
+  }
+
+  function updateScope(){
+    const active=viewMode==="rovercam";
+    scopeOverlay.hidden=!active;
+    if(!active)return;
+
+    let z=null;
+    if(roverState.targetZone&&visibleToCamera(roverState.targetZone)&&(!roverState.targetZone.mesh||roverState.targetZone.mesh.visible!==false))z=roverState.targetZone;
+    else z=attentionZone;
+
+    if(!z||!visibleToCamera(z)){
+      scopeReticle.classList.add("searching");
+      scopeReticle.classList.remove("locked");
+      scopeReticle.style.left="50%";scopeReticle.style.top="50%";
+      scopeTarget.textContent="SEARCHING";
+      scopeDistance.textContent="NO VISUAL CONTACT";
+      return;
+    }
+
+    const target=new THREE.Vector3(z.x,heightAt(z.x,z.z)+(z.kind==="gate"?1.0:.30),z);
+    const ndc=target.clone().project(camera);
+    const px=clamp((ndc.x*.5+.5)*100,4,96),py=clamp((-ndc.y*.5+.5)*100,5,95);
+    const pose=cameraPose(),dist=target.distanceTo(pose.origin);
+    scopeReticle.classList.remove("searching");scopeReticle.classList.add("locked");
+    scopeReticle.style.left=px+"%";scopeReticle.style.top=py+"%";
+    scopeTarget.textContent="VISUAL LOCK · "+z.id;
+    scopeDistance.textContent=z.label.toUpperCase()+" · "+dist.toFixed(1)+" m";
   }
 
   function setLight(i){
@@ -653,10 +715,10 @@ async function boot(){
   function animate(time){
     const dt=Math.min(.035,Math.max(0,(time-lastTime)/1000||.016));lastTime=time;
     if(running&&!paused){
-      updateBehavior(dt,time);updateMast(dt,time);updatePose(dt,time);updatePerception(dt);animateWorld(time);updateCamera(dt);updateUI();
+      updateBehavior(dt,time);updateMast(dt,time);updatePose(dt,time);updatePerception(dt);animateWorld(time);updateCamera(dt);updateScope();updateUI();
       saveTimer+=dt;if(saveTimer>6){saveTimer=0;saveLife()}
     }
-    else{updateMast(dt*.2,time);updatePose(dt*.2,time);animateWorld(time);updateCamera(dt*.25)}
+    else{updateMast(dt*.2,time);updatePose(dt*.2,time);animateWorld(time);updateCamera(dt*.25);updateScope()}
     renderer.render(scene,camera);
   }
   renderer.setAnimationLoop(animate);
