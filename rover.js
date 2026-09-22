@@ -403,12 +403,12 @@ async function boot(){
   efficiencyCore.position.set(.185,.98,0);rover.add(efficiencyCore);
 
   const UPGRADE_DEFS={
-    speed:{label:"MOVEMENT MODULE",cost:2},
-    mining:{label:"MINING MODULE",cost:3},
-    vision:{label:"LONG-RANGE OPTICS",cost:2},
-    detection:{label:"DETECTION ARRAY",cost:2},
-    analysis:{label:"FAST ANALYZER",cost:2},
-    efficiency:{label:"POWER EFFICIENCY",cost:3}
+    speed:{label:"MOVEMENT MODULE",cost:2,effect:"MOVE ×1.48"},
+    mining:{label:"MINING MODULE",cost:3,effect:"MINE ×1.85"},
+    vision:{label:"LONG-RANGE OPTICS",cost:2,effect:"VISION ×1.65"},
+    detection:{label:"DETECTION ARRAY",cost:2,effect:"DETECTION +14%"},
+    analysis:{label:"FAST ANALYZER",cost:2,effect:"ANALYZE ×1.75"},
+    efficiency:{label:"POWER EFFICIENCY",cost:3,effect:"ENERGY ×0.63"}
   };
   const has=u=>life.upgrades.includes(u);
   function maxBattery(){return 100}
@@ -1107,7 +1107,7 @@ async function boot(){
   function updatePose(dt,time){
     const x=roverState.x,z=roverState.z;
     const ground=heightAt(x,z);
-    rover.position.set(x,ground+.02,z);
+    rover.position.set(x,ground-.018,z);
     sun.position.set(x-8,11,z+4);sun.target.position.set(x,ground,z);sun.target.updateMatrixWorld();
 
     rover.rotation.order="YXZ";
@@ -1191,7 +1191,7 @@ async function boot(){
     const P=life.personality;
     curiosityFill.style.width=Math.round(P.curiosity*100)+"%";cautionFill.style.width=Math.round(P.caution*100)+"%";improveFill.style.width=Math.round(P.improve*100)+"%";
     curiosityText.textContent=Math.round(P.curiosity*100);cautionText.textContent=Math.round(P.caution*100);improveText.textContent=Math.round(P.improve*100);
-    upgradeList.innerHTML=life.upgrades.length?life.upgrades.map(u=>'<span class="upgrade-chip">'+UPGRADE_DEFS[u].label+'</span>').join(""):'<span class="empty-chip">stock configuration</span>';
+    upgradeList.innerHTML=life.upgrades.length?life.upgrades.map(u=>'<span class="upgrade-chip">'+UPGRADE_DEFS[u].label+' · '+UPGRADE_DEFS[u].effect+'</span>').join(""):'<span class="empty-chip">stock humanoid configuration</span>';
     const inv=[];if(m.coreHeld)inv.push(activeConfig.core);if(m.gateKnown)inv.push(m.gateActivated?"PORTAL: ACTIVE":"PORTAL: FOUND");if(life.parts)inv.push("MATERIAL UNITS ×"+life.parts);
     inventoryList.innerHTML=inv.length?inv.map(x=>'<span class="item-chip">'+x+'</span>').join(""):'<span class="empty-chip">nothing unusual yet</span>';
   }
@@ -1281,7 +1281,7 @@ async function boot(){
   newLifeButton.addEventListener("click",()=>{if(confirm("Tiny Bot の性格・記憶・改造をすべて初期化しますか？")){try{localStorage.removeItem(SAVE_KEY)}catch(_){}location.reload()}});
   window.addEventListener("blur",()=>{if(running&&!paused){paused=true;pauseButton.textContent="RESUME";pauseButton.setAttribute("aria-pressed","true");saveLife()}});
 
-  buildWorld();applyUpgradeVisualsAndBattery();rover.position.set(roverState.x,heightAt(roverState.x,roverState.z)+.02,roverState.z);updatePose(.016,0);updateUI();updateCamera(.016);
+  buildWorld();applyUpgradeVisualsAndBattery();rover.position.set(roverState.x,heightAt(roverState.x,roverState.z)-.018,roverState.z);updatePose(.016,0);updateUI();updateCamera(.016);
   if(life.position)log("saved life found · map "+String(life.mapIndex+1).padStart(2,"0"));
 
   function animate(time){
