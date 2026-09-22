@@ -209,11 +209,24 @@ async function boot(){
   dorsalGeo.setIndex([0,1,2]);
   const dorsal=new THREE.Mesh(dorsalGeo,finMat);fishGroup.add(dorsal);
 
-  const eyeMat=new THREE.MeshStandardMaterial({color:0x101413,roughness:.35});
-  const eyeGeo=new THREE.SphereGeometry(.032,12,8);
+  const headMat=new THREE.MeshStandardMaterial({color:0xd9d3c9,roughness:.48});
+  const headMesh=new THREE.Mesh(new THREE.SphereGeometry(.19,24,16),headMat);
+  headMesh.scale.set(1.28,.82,1.0);
+  headMesh.position.set(.61,.005,0);
+  headMesh.castShadow=true;
+  fishGroup.add(headMesh);
+
+  const eyeMat=new THREE.MeshStandardMaterial({color:0x101413,roughness:.30});
+  const eyeGeo=new THREE.SphereGeometry(.031,14,10);
   const eyeL=new THREE.Mesh(eyeGeo,eyeMat),eyeR=new THREE.Mesh(eyeGeo,eyeMat);
-  eyeL.position.set(.55,.075,.105);eyeR.position.set(.55,.075,-.105);
+  eyeL.position.set(.68,.075,.115);eyeR.position.set(.68,.075,-.115);
   fishGroup.add(eyeL,eyeR);
+
+  const mouthMat=new THREE.MeshStandardMaterial({color:0x5b3b35,roughness:.6});
+  const mouth=new THREE.Mesh(new THREE.TorusGeometry(.043,.008,8,24),mouthMat);
+  mouth.rotation.y=Math.PI/2;
+  mouth.position.set(.835,-.025,0);
+  fishGroup.add(mouth);
 
   const fish={
     x:-1.35,z:.25,heading:.08,
@@ -397,7 +410,7 @@ async function boot(){
     const arr=a.array;
     for(let i=0;i<arr.length;i+=3){
       const ox=waterBase[i],oy=waterBase[i+1];
-      arr[i+2]=Math.sin(ox*1.7+time*.0012)*.018+Math.sin(oy*2.15-time*.0008)*.013;
+      arr[i+1]=Math.sin(ox*1.7+time*.0012)*.018+Math.sin(oy*2.15-time*.0008)*.013;
     }
     a.needsUpdate=true;
     water.geometry.computeVertexNormals();
@@ -421,8 +434,8 @@ async function boot(){
       cameraDesired.set(fish.x-dir.x*2.35+side.x*.55,fy+1.35,fish.z-dir.z*2.35+side.z*.55);
       cameraTarget.set(fish.x+dir.x*.55,fy+.05,fish.z+dir.z*.55);
     }else{
-      cameraDesired.set(fish.x+dir.x*.58,fy+.045,fish.z+dir.z*.58);
-      cameraTarget.set(fish.x+dir.x*4.5,fy+fish.verticalVelocity*.6,fish.z+dir.z*4.5);
+      cameraDesired.set(fish.x+dir.x*.88,fy+.075,fish.z+dir.z*.88);
+      cameraTarget.set(fish.x+dir.x*4.8,fy+fish.verticalVelocity*.65,fish.z+dir.z*4.8);
     }
 
     const follow=viewMode==="pov"?7.5:3.6;
