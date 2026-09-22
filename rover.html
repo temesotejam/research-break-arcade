@@ -4,16 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#17100d">
-  <meta name="description" content="自分で探索・改造・次の世界への移動を選ぶ Tiny Rover。">
-  <title>Research Break Arcade — Tiny Rover</title>
+  <meta name="description" content="Minecraft風のブロック世界で自律的に成長する Tiny Bot。">
+  <title>Research Break Arcade — Tiny Bot</title>
   <link rel="stylesheet" href="rover.css">
 </head>
 <body>
   <main class="app">
     <header class="topbar">
       <div>
-        <p class="eyebrow">RESEARCH BREAK ARCADE · AUTONOMOUS LIFE</p>
-        <h1>Tiny Rover</h1>
+        <p class="eyebrow">MINECRAFT · AUTONOMOUS BOT</p>
+        <h1>Tiny Bot</h1>
       </div>
       <nav class="top-actions" aria-label="ゲーム切り替え">
         <a class="nav-button" href="index.html">Lander</a>
@@ -28,21 +28,21 @@
     <section class="rover-card">
       <div class="telemetry">
         <div>
-          <span class="mini-label">AUTONOMOUS AGENT</span>
+          <span class="mini-label">AUTONOMOUS MINECRAFT AGENT</span>
           <strong id="stateText">SYSTEM READY</strong>
-          <small id="mapText">MAP 01 · RED BASIN</small>
+          <small id="mapText">DIMENSION 01 · OVERWORLD PLAINS</small>
         </div>
         <div class="telemetry-values">
           <span id="batteryText">BATTERY 100%</span>
           <span id="speedText">SPEED 0.00 m/s</span>
-          <span id="partsText">PARTS 0</span>
-          <span id="sampleText">SAMPLES 0</span>
+          <span id="partsText">MATERIALS 0</span>
+          <span id="sampleText">ANALYSES 0</span>
           <span id="exploreText">EXPLORED 0%</span>
         </div>
       </div>
 
       <div class="stage-wrap">
-        <canvas id="roverCanvas" width="960" height="600" aria-label="自律ローバーが探索・自己改造・マップ移動を行う3D世界"></canvas>
+        <canvas id="roverCanvas" width="960" height="600" aria-label="自律ロボットがMinecraft風ブロック世界で素材探索・自己改造・ポータル移動を行う3D世界"></canvas>
         <div id="viewBadge" class="view-badge">OVERVIEW</div>
         <div id="decisionBadge" class="decision-badge">THINKING…</div>
 
@@ -62,9 +62,9 @@
 
         <div id="intro" class="intro">
           <div class="intro-panel">
-            <p class="intro-kicker">AUTONOMOUS LIFE</p>
-            <h2>このロボットには、攻略手順を与えていません。</h2>
-            <p>未知を調べる、自分を改造する、謎のアイテムを持ち帰る、ゲートを起動する、次の世界へ進む。候補の中から、その時の経験と性格でロボット自身が決めます。</p>
+            <p class="intro-kicker">AUTONOMOUS BLOCK WORLD</p>
+            <h2>このロボットは、Minecraftのような世界を自分で生きます。</h2>
+            <p>鉄・レッドストーンなどの素材を探して自分を改造し、ポータルに必要な手掛かりを集めて次のディメンションへ進みます。移動や採取は、その2つの最大目標のために行います。</p>
             <button id="enterButton" class="enter-button" type="button">観察を始める</button>
           </div>
         </div>
@@ -129,13 +129,13 @@
       </div>
 
       <div class="note">
-        <span>プレイヤーは改造や進行先を選びません。</span>
+        <span>プレイヤーは採掘・改造・ポータル進行を指示しません。</span>
         <span>進行と自己改造はこの端末に保存されます。</span>
       </div>
     </section>
 
     <footer class="footer">
-      <span>放置して戻ってきた時、前とは違う姿・場所になっていることを目指したモードです。</span>
+      <span>放置して戻ってきた時、装備もディメンションも変わっているMinecraft風自律観察モードです。</span>
       <span>Everything runs locally in the browser.</span>
     </footer>
   </main>
