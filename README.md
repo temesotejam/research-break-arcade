@@ -74,18 +74,25 @@
 
 ## Autonomous Mode — Tiny Rover
 
-1台の小型探査ローバーが自律的にフィールドを探索する観察モードです。
+1台の小型探査ローバーを「操作する」のではなく、ロボット自身の判断と成長を観察する永続型シミュレーションです。
 
 - 動く主体はローバー1台だけ
 - Three.js 0.186.0 を固定利用した3D WebGL描画
-- SURVEY → TARGET LOCK → DRIVE → SCAN → APPROACH → ARM DEPLOY → SAMPLE → LOG の自律行動ループ
-- 興味度の低い岩はスキャンだけで通過し、興味度が高い対象だけ接触調査
+- CURIOSITY / CAUTION / SELF-IMPROVE の性格値を個体ごとに生成
+- 探索、充電、自己改造、ゲート起動、次マップ移動を毎回スコアリングして自律選択
+- 失敗回数・充電回数・走行距離・調査経験から「今の自分に何が足りないか」を評価
+- TRACTION WHEELS / AUX BATTERY / LIDAR / ACTIVE SUSPENSION / ARM TOOL / SOLAR BOOST を自分で選んで装着
+- 改造は3Dモデルの外見にも反映
+- 岩や廃部品、マップ固有のキーアイテムを探索・回収
+- キーアイテムと以前見つけたゲートの関係を自分で試し、ゲートを起動
+- ゲート起動後も、残りの探索を続けるか次マップへ進むかを性格と探索率から自分で判断
+- MAP 01 RED BASIN → MAP 02 GLASS HOLLOW → MAP 03 ANCIENT RELAY → 以降は FRONTIER を自動生成
+- 進行、性格、記憶、アップグレード、現在位置を Local Storage に保存
 - 岩を先読みして回避し、進めない時は自動でバックして経路復帰
-- 6輪ローバー、マストカメラ、太陽電池、可動ロボットアームを3Dで表現
 - 地形の傾斜に合わせて車体がピッチ・ロール
-- バッテリーが減ると自動で停止して太陽電池充電
+- 6輪の左右回転速度は旋回角速度に応じて個別計算
 - VIEWで OVERVIEW / FOLLOW / ROVER CAM / ARM CAM を切り替え
-- ミッションログで現在の判断と行動を追える
+- NEW LIFE を押した場合のみ、性格・記憶・改造をすべて初期化
 - 時間制限なし、スコアなし
 
 公開ページ: `rover.html`
@@ -125,5 +132,5 @@
 - `orbit.js` — Orbit Sling ゲームロジック / Canvas描画
 - `rover.html` — Tiny Rover UI
 - `rover.css` — Tiny Rover デザイン
-- `rover.js` — Tiny Rover 自律行動 / 3Dフィールド / 4視点カメラ
+- `rover.js` — Tiny Rover 自律意思決定 / 自己改造 / マップ進行 / 永続化 / 3Dフィールド
 - `pond.html` — Tiny Rover への互換リダイレクト
