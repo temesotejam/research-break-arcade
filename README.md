@@ -13,6 +13,20 @@
 - ベストスコアはブラウザの Local Storage に保存
 - 外部ライブラリ、ビルド処理、サーバーは不要
 
+## Game 02 — Night Fishing
+
+夜の水辺で遊ぶ、1ボタンのタイミング＋リール操作ゲームです。
+
+- PC: `Space` だけ
+- Mobile: 画面下の大きなアクションボタン
+- CAST → HIT → REEL の3段階
+- リール中は押して巻き、離して糸の張りを逃がす
+- 全6種類の魚。珍しい魚ほど高得点
+- 1セッション 90 秒
+- ベストスコアはブラウザの Local Storage に保存
+
+公開ページ: `fishing.html`
+
 ## Run locally
 
 `index.html` をブラウザで開くだけでも動作します。ローカルHTTPサーバーを使う場合は任意の静的サーバーでこのディレクトリを配信してください。
@@ -31,4 +45,7 @@
 
 - `index.html` — UI
 - `styles.css` — レイアウト / デザイン
-- `game.js` — ゲームロジック / Canvas描画
+- `game.js` — Tiny Lander ゲームロジック / Canvas描画
+- `fishing.html` — Night Fishing UI
+- `fishing.css` — Night Fishing デザイン
+- `fishing.js` — Night Fishing ゲームロジック / Canvas描画
