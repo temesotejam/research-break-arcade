@@ -419,8 +419,14 @@ async function boot(){
     log("local scan · "+z.id);
   }
   function recognitionLabel(z){
-    const known=mem().recognized[z.id];
+    const m=mem(),known=m.recognized[z.id];
     if(known)return known;
+    if(m.discovered.includes(z.id)){
+      if(z.kind==="geology")return "ROCK";
+      if(z.kind==="parts")return "SALVAGE";
+      if(z.kind==="core")return "ARTIFACT";
+      if(z.kind==="gate")return "STRUCTURE";
+    }
     return z.kind==="geology"?"ROCK":"?";
   }
   function identifyZone(z){
@@ -755,7 +761,10 @@ async function boot(){
     }
 
     camera.up.set(0,1,0);
-    if(viewMode==="overview"){camDesired.set(roverState.x+11.5,15.5,roverState.z+14.0);camTarget.set(roverState.x,baseY,roverState.z)}
+    if(viewMode==="overview"){
+      camDesired.set(clamp(roverState.x+11.5,-28,28),15.5,clamp(roverState.z+14.0,-28,28));
+      camTarget.set(roverState.x,baseY,roverState.z);
+    }
     else if(viewMode==="follow"){camDesired.set(roverState.x-dir.x*3.3+side.x*.95,baseY+2.15,roverState.z-dir.z*3.3+side.z*.95);camTarget.set(roverState.x+dir.x*.9,baseY+.45,roverState.z+dir.z*.9)}
     else{const tip=new THREE.Vector3(.12,0,0);wrist.localToWorld(tip);camDesired.copy(tip).add(new THREE.Vector3(0,.08,0));if(roverState.targetZone)camTarget.set(roverState.targetZone.x,heightAt(roverState.targetZone.x,roverState.targetZone.z)+.35,roverState.targetZone.z);else camTarget.copy(tip).add(dir)}
     const k=viewMode==="overview"?2.3:(viewMode==="follow"?4.2:8.0);
