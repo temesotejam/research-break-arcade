@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0e1020">
+  <meta name="description" content="研究の合間に遊べる1ボタン積み上げゲーム Stack Tower。">
+  <title>Research Break Arcade — Stack Tower</title>
+  <link rel="stylesheet" href="tower.css">
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">RESEARCH BREAK ARCADE · GAME 03</p>
+        <h1>Stack Tower</h1>
+      </div>
+      <nav class="top-actions" aria-label="ゲーム切り替え">
+        <a class="nav-button" href="index.html">Tiny Lander</a>
+        <a class="nav-button" href="fishing.html">Night Fishing</a>
+        <button id="soundButton" class="nav-button" type="button" aria-pressed="false">SOUND OFF</button>
+        <button id="pauseButton" class="nav-button" type="button" aria-pressed="false">PAUSE</button>
+      </nav>
+    </header>
+
+    <section class="game-card">
+      <div class="hud" aria-live="polite">
+        <div class="hud-item"><span>TIME</span><strong id="timeValue">90.0</strong><small>s</small></div>
+        <div class="hud-item"><span>HEIGHT</span><strong id="heightValue">0</strong><small>blocks</small></div>
+        <div class="hud-item"><span>COMBO</span><strong id="comboValue">×0</strong></div>
+        <div class="hud-item"><span>BEST</span><strong id="bestValue">0</strong></div>
+      </div>
+
+      <div class="stage-wrap">
+        <canvas id="gameCanvas" width="960" height="600" aria-label="ブロック積み上げゲーム"></canvas>
+
+        <div id="perfectCallout" class="perfect-callout" hidden aria-live="polite">PERFECT!</div>
+
+        <div id="overlay" class="overlay">
+          <div class="overlay-panel">
+            <p id="overlayKicker" class="overlay-kicker">ONE BUTTON BREAK</p>
+            <h2 id="overlayTitle">ちょうどいい位置で、落とすだけ。</h2>
+            <p id="overlayText">Space / 画面下のDROPでブロックを置きます。重ならなかった部分は切り落とされ、完全に外すと終了です。</p>
+            <div id="resultStats" class="result-stats" hidden></div>
+            <div class="overlay-actions">
+              <button id="primaryButton" class="primary-button" type="button">START STACKING</button>
+              <button id="secondaryButton" class="secondary-button" type="button" hidden>研究に戻る</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="status-panel">
+        <div>
+          <p class="status-label">NOW</p>
+          <strong id="statusText">準備中</strong>
+          <span id="hintText">ピッタリ重ねるほど幅を維持できます。</span>
+        </div>
+        <div class="accuracy-box">
+          <span>LAST ALIGN</span>
+          <strong id="accuracyText">—</strong>
+          <small id="speedText">Speed —</small>
+        </div>
+      </div>
+
+      <button id="dropButton" class="drop-button" type="button">
+        <span>DROP</span>
+        <small>Space / Tap</small>
+      </button>
+
+      <div class="rules">
+        <span><b>重なる</b> → その幅で次へ</span>
+        <span><b>±4 px以内</b> → PERFECT + 幅を少し回復</span>
+        <span><b>完全に外す</b> → GAME OVER</span>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span>高くなるほど移動速度が上がります。</span>
+      <span>Best height is saved on this device.</span>
+    </footer>
+  </main>
+
+  <script src="tower.js"></script>
+</body>
+</html>
