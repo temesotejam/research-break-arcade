@@ -569,7 +569,7 @@
   window.addEventListener("keydown", (e) => {
     if (e.repeat || e.code !== "Space") return;
     const tag = e.target && e.target.tagName;
-    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || tag === "BUTTON") return;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
     e.preventDefault();
     actionDown();
   });
