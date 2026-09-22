@@ -128,6 +128,7 @@ async function boot(){
   let lightIndex=0;
 
   let activeConfig=configFor(life.mapIndex),worldGroup=null,zones=[],obstacles=[],gateVisual=null,terrainSeed=activeConfig.seed;
+  let visualObjects=[],occlusionMeshes=[],detectionCache=[],detectionByZoneId=new Map(),attentionDetection=null;
   const WORLD=64;
   function heightAt(x,z){
     const r=activeConfig.rough;
@@ -139,14 +140,31 @@ async function boot(){
     scene.remove(g);
   }
 
+  function registerOccluder(mesh,owner=null){
+    if(!mesh)return;
+    mesh.traverse(o=>{
+      if(!o.isMesh)return;
+      o.userData.visualOwner=owner;
+      occlusionMeshes.push(o);
+    });
+  }
+  function registerVisual(mesh,meta){
+    const obj={mesh,...meta};
+    visualObjects.push(obj);
+    registerOccluder(mesh,obj);
+    return obj;
+  }
+
   function buildWorld(){
     if(worldGroup)disposeGroup(worldGroup);
     activeConfig=configFor(life.mapIndex);terrainSeed=activeConfig.seed;worldGroup=new THREE.Group();scene.add(worldGroup);zones=[];obstacles=[];gateVisual=null;
+    visualObjects=[];occlusionMeshes=[];detectionCache=[];detectionByZoneId=new Map();attentionDetection=null;
     scene.background=new THREE.Color(activeConfig.theme.bg);scene.fog.color.setHex(activeConfig.theme.fog);
 
     const g=new THREE.PlaneGeometry(WORLD,WORLD,128,128);g.rotateX(-Math.PI/2);const a=g.attributes.position;
     for(let i=0;i<a.count;i++)a.setY(i,heightAt(a.getX(i),a.getZ(i)));a.needsUpdate=true;g.computeVertexNormals();
     const ground=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:activeConfig.theme.ground,roughness:.98}));ground.receiveShadow=true;worldGroup.add(ground);
+    ground.userData.isTerrain=true;registerOccluder(ground,null);
 
     const pebMat=new THREE.MeshStandardMaterial({color:activeConfig.theme.rock,roughness:1});
     for(let i=0;i<150;i++){
@@ -154,6 +172,11 @@ async function boot(){
       const m=new THREE.Mesh(new THREE.IcosahedronGeometry(1,1),pebMat);
       const x=-29+((i*37+life.mapIndex*13)%101)/101*58,z=-29+((i*61+life.mapIndex*19)%103)/103*58;
       m.position.set(x,heightAt(x,z)+rr*.3,z);m.scale.set(rr*1.7,rr*.58,rr*1.35);m.rotation.set(i*.17,i*.37,i*.09);worldGroup.add(m);
+      if(rr>=.072){
+        registerVisual(m,{id:"P-"+String(i+1).padStart(3,"0"),kind:"ambientRock",label:"surface rock",zone:null,ambient:true});
+      }else{
+        registerOccluder(m,null);
+      }
     }
 
     const discovered=new Set(mem().discovered);
@@ -177,12 +200,16 @@ async function boot(){
         gateVisual={group:gate,portal,mat:portalMat};
         mesh=gate;obstacles.push({x:def.x,z:def.z,rad:1.0,zoneId:def.id});
       }
+      let visual=null;
       if(mesh){
         mesh.position.set(def.x,heightAt(def.x,def.z),def.z);
         if(discovered.has(def.id)&&(def.kind==="parts"||def.kind==="core"))mesh.visible=false;
         mesh.castShadow=true;mesh.receiveShadow=true;worldGroup.add(mesh);
+        visual=registerVisual(mesh,{id:def.id,kind:def.kind,label:def.label,zone:null,ambient:false});
       }
-      zones.push({...def,mesh,discovered:discovered.has(def.id)});
+      const zone={...def,mesh,visual,discovered:discovered.has(def.id)};
+      if(visual)visual.zone=zone;
+      zones.push(zone);
     });
     setLight(lightIndex);
     updateMapUI();
@@ -620,72 +647,153 @@ async function boot(){
     return{origin,forward,right,up};
   }
 
-  function terrainBlocks(origin,target){
-    const steps=12;
-    for(let i=1;i<steps;i++){
-      const t=i/steps;
-      const x=lerp(origin.x,target.x,t),z=lerp(origin.z,target.z,t),lineY=lerp(origin.y,target.y,t);
-      if(heightAt(x,z)>lineY-.035)return true;
+  const sensorCamera=new THREE.PerspectiveCamera(THREE.MathUtils.radToDeg(CAMERA_VFOV),camera.aspect,.05,32);
+  const sensorFrustum=new THREE.Frustum();
+  const sensorMatrix=new THREE.Matrix4();
+  const sensorRay=new THREE.Raycaster();
+  const boxScratch=new THREE.Box3();
+  const centerScratch=new THREE.Vector3();
+
+  function updateSensorCamera(){
+    const pose=cameraPose();
+    sensorCamera.aspect=camera.aspect;
+    sensorCamera.fov=THREE.MathUtils.radToDeg(CAMERA_VFOV);
+    sensorCamera.position.copy(pose.origin);
+    sensorCamera.up.copy(pose.up);
+    sensorCamera.lookAt(pose.origin.clone().add(pose.forward));
+    sensorCamera.updateProjectionMatrix();
+    sensorCamera.updateMatrixWorld(true);
+    sensorCamera.matrixWorldInverse.copy(sensorCamera.matrixWorld).invert();
+    sensorMatrix.multiplyMatrices(sensorCamera.projectionMatrix,sensorCamera.matrixWorldInverse);
+    sensorFrustum.setFromProjectionMatrix(sensorMatrix);
+    return pose;
+  }
+
+  function projectedRect(box){
+    const pts=[];
+    for(const x of [box.min.x,box.max.x])for(const y of [box.min.y,box.max.y])for(const z of [box.min.z,box.max.z]){
+      pts.push(new THREE.Vector3(x,y,z).project(sensorCamera));
     }
+    let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+    for(const p of pts){
+      if(!Number.isFinite(p.x)||!Number.isFinite(p.y))continue;
+      minX=Math.min(minX,p.x);maxX=Math.max(maxX,p.x);minY=Math.min(minY,p.y);maxY=Math.max(maxY,p.y);
+    }
+    if(!Number.isFinite(minX))return null;
+    const cMinX=clamp(minX,-1,1),cMaxX=clamp(maxX,-1,1),cMinY=clamp(minY,-1,1),cMaxY=clamp(maxY,-1,1);
+    const total=Math.max(.000001,(maxX-minX)*(maxY-minY));
+    const clipped=Math.max(0,cMaxX-cMinX)*Math.max(0,cMaxY-cMinY);
+    if(clipped<=0)return null;
+    return{
+      minX:cMinX,maxX:cMaxX,minY:cMinY,maxY:cMaxY,
+      visibleFraction:clamp(clipped/total,0,1),
+      screenFraction:clipped/4
+    };
+  }
+
+  function samplePoints(box){
+    const c=box.getCenter(new THREE.Vector3());
+    const sx=(box.max.x-box.min.x)*.28,sy=(box.max.y-box.min.y)*.28,sz=(box.max.z-box.min.z)*.28;
+    return[
+      c,
+      new THREE.Vector3(c.x+sx,c.y,c.z),
+      new THREE.Vector3(c.x-sx,c.y,c.z),
+      new THREE.Vector3(c.x,c.y+sy,c.z),
+      new THREE.Vector3(c.x,c.y,c.z+sz),
+      new THREE.Vector3(c.x,c.y,c.z-sz)
+    ];
+  }
+
+  function rayVisible(owner,origin,point){
+    const v=point.clone().sub(origin),dist=v.length();
+    if(dist<.08)return true;
+    sensorRay.set(origin,v.normalize());sensorRay.near=.03;sensorRay.far=dist+.05;
+    const hits=sensorRay.intersectObjects(occlusionMeshes,false);
+    if(!hits.length)return true;
+    const first=hits[0];
+    if(first.object.userData.visualOwner===owner)return true;
+    if(first.object.userData.isTerrain&&Math.abs(first.distance-dist)<.16)return true;
     return false;
   }
 
-  function visibleToCamera(zone){
-    const pose=cameraPose();
-    const target=new THREE.Vector3(zone.x,heightAt(zone.x,zone.z)+(zone.kind==="gate"?1.0:.30),zone.z);
-    const v=target.clone().sub(pose.origin),dist=v.length();
-    const maxRange=has("lidar")?18.0:11.5;
-    if(dist>.15&&dist>maxRange)return false;
-    const f=v.dot(pose.forward),side=v.dot(pose.right),vertical=v.dot(pose.up);
-    if(f<=.08)return false;
-    const hAng=Math.abs(Math.atan2(side,f)),vAng=Math.abs(Math.atan2(vertical,f));
-    const hHalf=Math.atan(Math.tan(CAMERA_VFOV*.5)*camera.aspect);
-    if(hAng>hHalf||vAng>CAMERA_VFOV*.5)return false;
-    if(terrainBlocks(pose.origin,target))return false;
-    for(const o of obstacles){
-      if(o.zoneId===zone.id)continue;
-      const ox=o.x-pose.origin.x,oz=o.z-pose.origin.z;
-      const tx=zone.x-pose.origin.x,tz=zone.z-pose.origin.z;
-      const len2=tx*tx+tz*tz;if(len2<.001)continue;
-      const u=clamp((ox*tx+oz*tz)/len2,0,1);
-      const px=pose.origin.x+tx*u,pz=pose.origin.z+tz*u;
-      if(u<.97&&Math.hypot(o.x-px,o.z-pz)<o.rad*.72)return false;
+  function rawClassFor(obj,confidence){
+    if(obj.zone){
+      const known=recognitionLabel(obj.zone);
+      return known;
     }
-    return true;
+    if(obj.kind==="ambientRock"){
+      return confidence>=.66?"ROCK":"?";
+    }
+    return "?";
   }
 
-  function attentionScore(zone){
-    const pose=cameraPose();
-    const target=new THREE.Vector3(zone.x,heightAt(zone.x,zone.z)+(zone.kind==="gate"?1.0:.30),zone.z);
-    const v=target.sub(pose.origin),dist=v.length();
-    const f=v.dot(pose.forward),side=v.dot(pose.right),vertical=v.dot(pose.up);
-    if(f<=0)return Infinity;
-    return Math.hypot(Math.atan2(side,f),Math.atan2(vertical,f))+.008*dist;
+  function detectVisualObject(obj,pose){
+    if(!obj||!obj.mesh||obj.mesh.visible===false)return null;
+    boxScratch.setFromObject(obj.mesh);
+    if(boxScratch.isEmpty()||!sensorFrustum.intersectsBox(boxScratch))return null;
+    const center=boxScratch.getCenter(centerScratch);
+    const dist=center.distanceTo(pose.origin);
+    const maxRange=has("lidar")?18.0:11.5;
+    if(dist>maxRange)return null;
+
+    const rect=projectedRect(boxScratch);
+    if(!rect)return null;
+    const minArea=obj.ambient?(has("lidar")?.00005:.00009):.00006;
+    if(rect.screenFraction<minArea)return null;
+
+    const samples=samplePoints(boxScratch);
+    let visibleSamples=0;
+    for(const p of samples)if(rayVisible(obj,pose.origin,p))visibleSamples++;
+    const occlusion=visibleSamples/samples.length;
+    if(occlusion<.17)return null;
+
+    const sizeScore=clamp(Math.sqrt(rect.screenFraction)*7.0,0,1);
+    const distanceScore=clamp(1-dist/maxRange,0,1);
+    const confidence=clamp(.10+.32*sizeScore+.34*occlusion+.14*rect.visibleFraction+.10*distanceScore,.05,.99);
+    const cls=rawClassFor(obj,confidence);
+
+    return{obj,rect,dist,confidence,occlusion,cls};
+  }
+
+  function detectionForZone(zone){
+    return zone?detectionByZoneId.get(zone.id)||null:null;
+  }
+
+  function visibleToCamera(zone){
+    const d=detectionForZone(zone);
+    return !!(d&&d.confidence>=.22&&d.occlusion>=.17);
   }
 
   function updatePerception(dt){
     perceptionTimer-=dt;if(perceptionTimer>0)return;perceptionTimer=.12;
-    const m=mem();
-    const visible=[];
-    for(const z of zones){
-      if(z.mesh&&z.mesh.visible===false)continue;
-      if(visibleToCamera(z)){
-        visible.push(z);
-        if(!m.seen.includes(z.id)){
-          m.seen.push(z.id);
-          log("visual contact · "+z.id+" · "+z.label);
-          decisionBadge.textContent="SEEN · "+z.id;
+    const pose=updateSensorCamera(),m=mem(),detections=[];
+    detectionByZoneId=new Map();
+
+    for(const obj of visualObjects){
+      const d=detectVisualObject(obj,pose);
+      if(!d)continue;
+      detections.push(d);
+      if(obj.zone){
+        detectionByZoneId.set(obj.zone.id,d);
+        if(d.confidence>=.30&&!m.seen.includes(obj.zone.id)){
+          m.seen.push(obj.zone.id);
+          log("visual contact · "+obj.zone.id+" · "+(d.cls==="?"?"unknown object":d.cls.toLowerCase())+" · "+Math.round(d.confidence*100)+"%");
+          decisionBadge.textContent="SEEN · "+obj.zone.id;
           saveLife();
           if(roverState.state==="NAV"&&roverState.navPurpose==="frontier"){
-            roverState.speed=0;
-            think();
+            roverState.speed=0;think();
           }
         }
       }
     }
-    visible.sort((a,b)=>attentionScore(a)-attentionScore(b));
-    visibleZonesCache=visible;
-    attentionZone=visible[0]||null;
+
+    detections.sort((a,b)=>{
+      const acx=(a.rect.minX+a.rect.maxX)*.5,acy=(a.rect.minY+a.rect.maxY)*.5;
+      const bcx=(b.rect.minX+b.rect.maxX)*.5,bcy=(b.rect.minY+b.rect.maxY)*.5;
+      return Math.hypot(acx,acy)+a.dist*.003-(Math.hypot(bcx,bcy)+b.dist*.003);
+    });
+    detectionCache=detections.slice(0,18);
+    attentionDetection=detectionCache[0]||null;
   }
 
   function updatePose(dt,time){
@@ -778,42 +886,41 @@ async function boot(){
     scopeOverlay.hidden=!active;
     if(!active){scopeDetections.innerHTML="";return;}
 
-    const poseForHud=cameraPose();
     const detections=[];
-    for(const obj of visibleZonesCache){
-      if(obj.mesh&&obj.mesh.visible===false)continue;
-      if(!visibleToCamera(obj))continue;
-      const pt=new THREE.Vector3(obj.x,heightAt(obj.x,obj.z)+(obj.kind==="gate"?1.0:.30),obj.z);
-      const ndc=pt.clone().project(camera);
-      if(ndc.z<-1||ndc.z>1||Math.abs(ndc.x)>1||Math.abs(ndc.y)>1)continue;
-      const px=(ndc.x*.5+.5)*100,py=(-ndc.y*.5+.5)*100,dist=pt.distanceTo(poseForHud.origin);
-      const cls=recognitionLabel(obj),unknown=cls==="?";
-      detections.push('<div class="detection-box" style="left:'+px.toFixed(2)+'%;top:'+py.toFixed(2)+'%"><div class="detection-label '+(unknown?'unknown':'')+'">'+cls+'<small>'+obj.id+' · '+dist.toFixed(1)+' m</small></div></div>');
+    for(const d of detectionCache){
+      const left=(d.rect.minX*.5+.5)*100;
+      const right=(d.rect.maxX*.5+.5)*100;
+      const top=(-d.rect.maxY*.5+.5)*100;
+      const bottom=(-d.rect.minY*.5+.5)*100;
+      const w=clamp(right-left,2.8,28),h=clamp(bottom-top,3.0,28);
+      const cx=(left+right)*.5,cy=(top+bottom)*.5;
+      const unknown=d.cls==="?";
+      detections.push(
+        '<div class="detection-box" style="left:'+cx.toFixed(2)+'%;top:'+cy.toFixed(2)+'%;width:'+w.toFixed(2)+'%;height:'+h.toFixed(2)+'%">'+
+        '<div class="detection-label '+(unknown?'unknown':'')+'">'+d.cls+
+        '<small>'+Math.round(d.confidence*100)+'% · '+d.dist.toFixed(1)+' m</small></div></div>'
+      );
     }
     scopeDetections.innerHTML=detections.join("");
 
-    let z=null;
-    if(roverState.targetZone&&visibleToCamera(roverState.targetZone)&&(!roverState.targetZone.mesh||roverState.targetZone.mesh.visible!==false))z=roverState.targetZone;
-    else z=attentionZone;
+    let d=null;
+    const targetDet=roverState.targetZone?detectionForZone(roverState.targetZone):null;
+    if(targetDet)d=targetDet;else d=attentionDetection;
 
-    if(!z||!visibleToCamera(z)){
-      scopeReticle.classList.add("searching");
-      scopeReticle.classList.remove("locked");
+    if(!d){
+      scopeReticle.classList.add("searching");scopeReticle.classList.remove("locked");
       scopeReticle.style.left="50%";scopeReticle.style.top="50%";
       scopeTarget.textContent="SEARCHING";
       scopeDistance.textContent=roverState.state==="NAV"&&roverState.navPurpose==="frontier"?"SCANNING WHILE MOVING":"NO VISUAL CONTACT";
       return;
     }
 
-    const target=new THREE.Vector3(z.x,heightAt(z.x,z.z)+(z.kind==="gate"?1.0:.30),z);
-    const ndc=target.clone().project(camera);
-    const px=clamp((ndc.x*.5+.5)*100,4,96),py=clamp((-ndc.y*.5+.5)*100,5,95);
-    const pose=cameraPose(),dist=target.distanceTo(pose.origin);
+    const cx=((d.rect.minX+d.rect.maxX)*.25+.5)*100;
+    const cy=(-(d.rect.minY+d.rect.maxY)*.25+.5)*100;
     scopeReticle.classList.remove("searching");scopeReticle.classList.add("locked");
-    scopeReticle.style.left=px+"%";scopeReticle.style.top=py+"%";
-    const cls=recognitionLabel(z);
-    scopeTarget.textContent="VISUAL LOCK · "+cls;
-    scopeDistance.textContent=z.id+" · "+dist.toFixed(1)+" m";
+    scopeReticle.style.left=clamp(cx,4,96)+"%";scopeReticle.style.top=clamp(cy,5,95)+"%";
+    scopeTarget.textContent="VISUAL LOCK · "+d.cls;
+    scopeDistance.textContent=Math.round(d.confidence*100)+"% · "+d.dist.toFixed(1)+" m";
   }
 
   function setLight(i){
