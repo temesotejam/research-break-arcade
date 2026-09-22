@@ -2,11 +2,11 @@
 "use strict";
 
 const SAVE_KEY="rba-tiny-bot-retro-world-v1";
-const WORLD_SIZE=128;
+const WORLD_SIZE=64;
 const HALF=WORLD_SIZE/2;
 const VIEW_FOV=Math.PI*120/180;
-const SEARCH_CELL=6;
-const MAP_CELL=2;
+const SEARCH_CELL=4;
+const MAP_CELL=1;
 
 const $=id=>document.getElementById(id);
 const canvas=$("roverCanvas"),ctx=canvas.getContext("2d");
@@ -17,6 +17,7 @@ const stateText=$("stateText"),mapText=$("mapText"),missionText=$("missionText")
 const activityText=$("activityText"),detailText=$("detailText"),batteryText=$("batteryText"),speedText=$("speedText");
 const partsText=$("partsText"),sampleText=$("sampleText"),exploreText=$("exploreText"),headingText=$("headingText");
 const lightLabel=$("lightLabel"),logList=$("logList"),upgradeList=$("upgradeList"),inventoryList=$("inventoryList");
+const capabilityStatus=$("capabilityStatus"),lastUpgrade=$("lastUpgrade");
 const curiosityFill=$("curiosityFill"),cautionFill=$("cautionFill"),improveFill=$("improveFill");
 const curiosityText=$("curiosityText"),cautionText=$("cautionText"),improveText=$("improveText");
 
@@ -56,12 +57,12 @@ const REGION_THEMES=[
 ];
 
 const UPGRADE_DEFS={
-  speed:{label:"MOVEMENT MODULE",cost:2,effect:"MOVE ×1.48"},
-  tool:{label:"TOOL MODULE",cost:3,effect:"RECOVER ×1.85"},
-  vision:{label:"LONG-RANGE OPTICS",cost:2,effect:"VISION ×1.65"},
-  detection:{label:"DETECTION ARRAY",cost:2,effect:"DETECTION +14%"},
-  analysis:{label:"FAST ANALYZER",cost:2,effect:"ANALYZE ×1.75"},
-  efficiency:{label:"POWER EFFICIENCY",cost:3,effect:"ENERGY ×0.63"}
+  speed:{label:"MOVEMENT MODULE",cost:2,effect:"MOVE ×1.48",detail:"MOVE SPEED 3.00 → 4.44 tile/s"},
+  tool:{label:"TOOL MODULE",cost:3,effect:"RECOVER ×1.85",detail:"RECOVERY RATE 1.00 → 1.85"},
+  vision:{label:"LONG-RANGE OPTICS",cost:2,effect:"VISION ×1.65",detail:"VISION RANGE 13.5 → 22.0 tiles"},
+  detection:{label:"DETECTION ARRAY",cost:2,effect:"DETECTION +14%",detail:"DETECTION BONUS 0 → +14%"},
+  analysis:{label:"FAST ANALYZER",cost:2,effect:"ANALYZE ×1.75",detail:"ANALYSIS RATE 1.00 → 1.75"},
+  efficiency:{label:"POWER EFFICIENCY",cost:3,effect:"ENERGY ×0.63",detail:"ENERGY USE 100% → 63%"}
 };
 
 function hash2(x,y,seed){
@@ -85,11 +86,11 @@ function regionTheme(index){
 function tileAt(x,y){
   const ix=Math.floor(x),iy=Math.floor(y);
   if(Math.abs(ix)>HALF||Math.abs(iy)>HALF)return"void";
-  if(Math.hypot(ix,iy)<4)return"grass";
+  if(Math.hypot(ix,iy)<3)return"grass";
   const seed=life.regionIndex*997+31;
-  const elevation=.55*valueNoise(ix,iy,24,seed)+.30*valueNoise(ix,iy,10,seed+17)+.15*valueNoise(ix,iy,4,seed+43);
-  const moisture=.70*valueNoise(ix,iy,21,seed+101)+.30*valueNoise(ix,iy,6,seed+151);
-  const detail=valueNoise(ix,iy,3,seed+207);
+  const elevation=.55*valueNoise(ix,iy,12,seed)+.30*valueNoise(ix,iy,5,seed+17)+.15*valueNoise(ix,iy,2,seed+43);
+  const moisture=.70*valueNoise(ix,iy,11,seed+101)+.30*valueNoise(ix,iy,3,seed+151);
+  const detail=valueNoise(ix,iy,2,seed+207);
 
   if(life.regionIndex%4===1){
     if(elevation<.11)return"water";
@@ -133,7 +134,7 @@ function findPassable(rand,minR,maxR,used){
     const a=rand()*Math.PI*2,r=minR+rand()*(maxR-minR);
     const x=Math.round(Math.cos(a)*r),y=Math.round(Math.sin(a)*r);
     if(!passableTile(tileAt(x,y)))continue;
-    if(used.some(p=>dist(x,y,p.x,p.y)<5))continue;
+    if(used.some(p=>dist(x,y,p.x,p.y)<3))continue;
     return{x,y};
   }
   return{x:Math.round(minR),y:0};
@@ -142,18 +143,18 @@ function makeRegionObjects(){
   const rand=seeded(0x6d2b79f5+life.regionIndex*9187),used=[],out=[];
   const theme=regionTheme(life.regionIndex);
 
-  for(let i=0;i<10;i++){
-    const p=findPassable(rand,5,30,used);used.push(p);
+  for(let i=0;i<8;i++){
+    const p=findPassable(rand,3,15,used);used.push(p);
     out.push({id:"P-"+life.regionIndex+"-"+i,x:p.x,y:p.y,kind:"parts",label:"lost parts cache",className:"MACHINE PARTS",parts:1+(rand()>.76?1:0),radius:.8});
   }
-  for(let i=0;i<6;i++){
-    const p=findPassable(rand,7,36,used);used.push(p);
+  for(let i=0;i<4;i++){
+    const p=findPassable(rand,4,18,used);used.push(p);
     out.push({id:"R-"+life.regionIndex+"-"+i,x:p.x,y:p.y,kind:"ruin",label:theme.ruin,className:theme.ruin,interest:.45+rand()*.5,radius:1.2});
   }
-  const key=findPassable(rand,14,28,used);used.push(key);
+  const key=findPassable(rand,7,14,used);used.push(key);
   out.push({id:"KEY-"+life.regionIndex,x:key.x,y:key.y,kind:"core",label:theme.key,className:theme.key,radius:.9});
 
-  const gate=findPassable(rand,32,48,used);used.push(gate);
+  const gate=findPassable(rand,16,24,used);used.push(gate);
   out.push({id:"GATE-"+life.regionIndex,x:gate.x,y:gate.y,kind:"gate",label:theme.gate,className:theme.gate,radius:2.1});
 
   return out;
@@ -164,7 +165,7 @@ function freshLife(){
     version:1,regionIndex:0,parts:0,discoveries:0,battery:100,upgrades:[],
     personality:{curiosity:rnd(.48,.90),caution:rnd(.36,.80),improve:rnd(.45,.92)},
     exp:{stucks:0,charges:0,distance:0,scans:0,gates:0},
-    regions:{},position:null,currentMission:null,lastSeen:Date.now()
+    regions:{},position:null,currentMission:null,lastUpgrade:null,lastSeen:Date.now()
   };
 }
 function loadLife(){
@@ -177,12 +178,12 @@ let life=loadLife();
 
 function mem(){
   const k=String(life.regionIndex);
-  if(!life.regions[k])life.regions[k]={seen:[],discovered:[],recognized:{},keyHeld:false,gateKnown:false,gateActive:false,visited:[],mapped:[],worldVersion:3};
+  if(!life.regions[k])life.regions[k]={seen:[],discovered:[],recognized:{},keyHeld:false,gateKnown:false,gateActive:false,visited:[],mapped:[],worldVersion:4};
   const m=life.regions[k];
   if(!Array.isArray(m.seen))m.seen=[];
   if(!Array.isArray(m.discovered))m.discovered=[];
   if(!m.recognized)m.recognized={};
-  if(m.worldVersion!==3){m.visited=[];m.mapped=[];m.worldVersion=3;}
+  if(m.worldVersion!==4){m.visited=[];m.mapped=[];m.worldVersion=4;}
   if(!Array.isArray(m.visited))m.visited=[];
   if(!Array.isArray(m.mapped))m.mapped=[];
   return m;
@@ -200,6 +201,7 @@ const miniCanvas=document.createElement("canvas");
 miniCanvas.width=WORLD_SIZE/MAP_CELL;miniCanvas.height=WORLD_SIZE/MAP_CELL;
 const miniCtx=miniCanvas.getContext("2d");
 let mappedSet=new Set();
+let upgradeNotice=null;
 
 const bot={
   x:0,y:0,heading:0,speed:0,targetSpeed:0,battery:life.battery||100,state:"THINK",timer:1,
@@ -325,11 +327,11 @@ function markVisited(){
 }
 function chooseFrontier(){
   const m=mem(),visited=new Set(m.visited),cx=Math.round(bot.x/SEARCH_CELL),cy=Math.round(bot.y/SEARCH_CELL),c=[];
-  const desired=12+life.personality.curiosity*8;
+  const desired=8+life.personality.curiosity*5;
   for(let dx=-3;dx<=3;dx++)for(let dy=-3;dy<=3;dy++){
     if(dx===0&&dy===0)continue;
     const gx=cx+dx,gy=cy+dy,key=gx+","+gy,x=gx*SEARCH_CELL,y=gy*SEARCH_CELL;
-    if(Math.abs(x)>HALF-7||Math.abs(y)>HALF-7||visited.has(key))continue;
+    if(Math.abs(x)>HALF-5||Math.abs(y)>HALF-5||visited.has(key))continue;
     if(!passableTile(tileAt(x,y)))continue;
     const d=dist(bot.x,bot.y,x,y);
     const outward=Math.hypot(x,y)-Math.hypot(bot.x,bot.y);
@@ -516,7 +518,10 @@ function finishContact(){life.discoveries++;log("discovery recorded · "+bot.tar
 function startUpgrade(up){bot.state="UPGRADE";bot.timer=3.4;bot.upgradeChoice=up;bot.arm=0;log("self-upgrade · "+up.label.toLowerCase())}
 function finishUpgrade(){
   const up=bot.upgradeChoice;if(!up||life.parts<up.cost){think();return}
-  life.parts-=up.cost;life.upgrades.push(up.id);log("upgrade installed · "+up.label.toLowerCase());saveLife();
+  life.parts-=up.cost;life.upgrades.push(up.id);
+  life.lastUpgrade={id:up.id,label:up.label,effect:up.effect,detail:up.detail,at:Date.now()};
+  upgradeNotice={label:up.label,detail:up.detail,until:performance.now()+5200};
+  log("UPGRADE COMPLETE · "+up.label.toLowerCase()+" · "+up.detail.toLowerCase());saveLife();
   if(bot.mission&&bot.mission.type==="evolve"&&bot.mission.upgradeId===up.id)finishMission("upgrade installed");else think();
 }
 function startCharge(){bot.state="CHARGE";bot.speed=0;bot.arm=0;life.exp.charges++;log("energy recovery")}
@@ -635,6 +640,12 @@ function updateUI(){
   cautionText.textContent=Math.round(life.personality.caution*100);
   improveText.textContent=Math.round(life.personality.improve*100);
   upgradeList.innerHTML=life.upgrades.length?life.upgrades.map(u=>'<span class="upgrade-chip">'+UPGRADE_DEFS[u].label+' · '+UPGRADE_DEFS[u].effect+'</span>').join(""):'<span class="empty-chip">stock configuration</span>';
+  capabilityStatus.innerHTML=Object.entries(UPGRADE_DEFS).map(([id,d])=>{
+    const active=has(id);
+    return '<div class="capability '+(active?'active':'inactive')+'"><b>'+(active?'ON':'—')+'</b><span>'+d.label+'</span><small>'+d.detail+'</small></div>';
+  }).join("");
+  const lu=life.lastUpgrade;
+  lastUpgrade.innerHTML=lu?'<b>LAST UPGRADE</b><span>'+lu.label+'</span><small>'+lu.detail+'</small>':'<b>LAST UPGRADE</b><span>NONE YET</span><small>能力変化はここに残ります。</small>';
   const inv=[];if(m.keyHeld)inv.push(theme.key);if(m.gateKnown)inv.push(m.gateActive?"GATE: ACTIVE":"GATE: FOUND");if(life.parts)inv.push("PARTS ×"+life.parts);
   inventoryList.innerHTML=inv.length?inv.map(x=>'<span class="item-chip">'+x+'</span>').join(""):'<span class="empty-chip">nothing important yet</span>';
 }
@@ -720,7 +731,9 @@ function drawBot(tileSize){
   else{ctx.fillRect(-s*.14,-s*.84,s*.05,s*.05);ctx.fillRect(s*.09,-s*.84,s*.05,s*.05)}
   if(has("speed")){ctx.fillStyle="#5fa160";ctx.fillRect(-s*.25,s*.20,s*.20,s*.08);ctx.fillRect(s*.05,s*.20,s*.20,s*.08)}
   if(has("vision")){ctx.fillStyle="#5b9fb3";ctx.fillRect(-s*.29,-s*.86,s*.58,s*.08)}
-  if(has("detection")){ctx.fillStyle="#75c7aa";ctx.fillRect(-s*.03,-s*1.10,s*.06,s*.13)}
+  if(has("detection")){ctx.fillStyle="#75c7aa";ctx.fillRect(-s*.03,-s*1.10,s*.06,s*.13);ctx.fillRect(-s*.08,-s*1.13,s*.16,s*.05)}
+  if(has("tool")){ctx.fillStyle="#63bed0";ctx.fillRect(s*.34,-s*.52,s*.20,s*.11);ctx.fillRect(s*.46,-s*.48,s*.08,s*.35)}
+  if(has("analysis")){ctx.fillStyle="#e5b95e";ctx.fillRect(-s*.37,-s*.91,s*.09,s*.16)}
   if(has("efficiency")){ctx.fillStyle="#77d178";ctx.fillRect(-s*.07,-s*.42,s*.14,s*.14)}
   ctx.restore();
 }
@@ -781,11 +794,23 @@ function drawMiniMap(){
   ctx.restore();
 }
 
+function drawUpgradeNotice(){
+  if(!upgradeNotice||performance.now()>upgradeNotice.until){upgradeNotice=null;return}
+  const w=Math.min(520,canvas.width-40),h=100,x=(canvas.width-w)/2,y=70;
+  ctx.save();
+  ctx.fillStyle="rgba(12,18,12,.94)";ctx.fillRect(x,y,w,h);
+  ctx.strokeStyle="#f0d66f";ctx.lineWidth=3;ctx.strokeRect(x+1.5,y+1.5,w-3,h-3);
+  ctx.fillStyle="#f0d66f";ctx.textAlign="center";ctx.font="900 14px ui-monospace,monospace";ctx.fillText("UPGRADE COMPLETE",canvas.width/2,y+24);
+  ctx.fillStyle="#ffffff";ctx.font="900 22px ui-monospace,monospace";ctx.fillText(upgradeNotice.label,canvas.width/2,y+54);
+  ctx.fillStyle="#9fe1b2";ctx.font="700 13px ui-monospace,monospace";ctx.fillText(upgradeNotice.detail,canvas.width/2,y+79);
+  ctx.restore();
+}
 function render(){
   ctx.imageSmoothingEnabled=false;
   if(viewMode==="close")renderMap(34,false);
   else if(viewMode==="sensor")renderMap(22,true);
   else renderMap(22,false);
+  drawUpgradeNotice();
 }
 function cycleView(){
   if(!running)return;
