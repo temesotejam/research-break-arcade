@@ -56,6 +56,22 @@
 
 公開ページ: `drift.html`
 
+## Game 05 — Orbit Sling
+
+惑星の重力を使って次々にスリングショットする1ボタン軌道ゲームです。
+
+- PC: `Space` で進行方向へ短い BOOST
+- Mobile: BOOST またはゲーム画面をタップ
+- 白い予測線で「無操作時の軌道」を表示
+- 緑のスリング帯を通過すると成功
+- 近づきすぎる時は BOOST で速度を上げ、重力による曲がりを弱める
+- BOOST燃料は成功ごとに回復し、惑星間で持ち越し
+- 失敗時は同じ惑星の手前から再挑戦
+- 1セッション 90 秒
+- ベストスコアはブラウザの Local Storage に保存
+
+公開ページ: `orbit.html`
+
 ## Run locally
 
 `index.html` をブラウザで開くだけでも動作します。ローカルHTTPサーバーを使う場合は任意の静的サーバーでこのディレクトリを配信してください。
@@ -84,3 +100,6 @@
 - `drift.html` — One Button Drift UI
 - `drift.css` — One Button Drift デザイン
 - `drift.js` — One Button Drift ゲームロジック / Canvas描画
+- `orbit.html` — Orbit Sling UI
+- `orbit.css` — Orbit Sling デザイン
+- `orbit.js` — Orbit Sling ゲームロジック / Canvas描画
