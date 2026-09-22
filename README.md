@@ -21,6 +21,12 @@
 
 `.github/workflows/pages.yml` で静的ファイルを GitHub Pages にデプロイします。
 
+新規リポジトリでは初回のみ、GitHub の **Settings → Pages → Build and deployment → Source** を **GitHub Actions** に設定する必要があります。設定後は `main` への push ごとに自動デプロイされます。
+
+公開先:
+
+`https://temesotejam.github.io/research-break-arcade/`
+
 ## Structure
 
 - `index.html` — UI
