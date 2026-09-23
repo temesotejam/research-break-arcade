@@ -81,7 +81,7 @@ button.on{background:#153d4e;border-color:#6bd9ef}.layout{display:grid;grid-temp
       </div>
       <div class="sec"><h2>CHRONICLE</h2></div>
       <div class="feed" id="feed"></div>
-      <div class="note">固定ルールだけでなく、繁殖時に代謝特性が少しずつ変異します。栄養の高い空地には休眠種子、植物帯には草食の休眠卵、草食帯には捕食者の休眠卵が残ります。岩盤も永久壁ではなく、雨・植物・分解者の影響でゆっくり風化し、最後は栄養の多い土壌へ戻ります。</div>
+      <div class="note">繁殖時に遺伝値が少しずつ変異し、ときどき大きな突然変異も発生します。遺伝値は実際に成長速度・代謝・捕食効率・分解速度へ影響し、色味にも反映されます。栄養の高い空地には休眠種子、植物帯には草食の休眠卵、草食帯には捕食者の休眠卵が残ります。岩盤も永久壁ではなく、雨・植物・分解者の影響でゆっくり風化し、最後は栄養の多い土壌へ戻ります。</div>
     </aside>
   </div>
 </main>
@@ -92,7 +92,7 @@ button.on{background:#153d4e;border-color:#6bd9ef}.layout{display:grid;grid-temp
 var W=120,H=72,N=W*H, canvas=document.getElementById('world'),ctx=canvas.getContext('2d',{alpha:false});
 var chart=document.getElementById('chart'),cx=chart.getContext('2d');
 var type,energy,age,gene,nutrient,nextType,nextEnergy,nextAge,nextGene,nextNut,gen=0,speed=1,paused=false,last=performance.now(),acc=0,stepRate=13;
-var seasonIndex=0,seasonTick=0,eventTick=0,history=[],logs=[];
+var seasonIndex=0,seasonTick=0,eventTick=0,history=[],logs=[],mutationCount=0;
 var names=['EMPTY','PLANT','GRAZER','PREDATOR','DECOMPOSER','ROCK'];
 var colors=[[6,17,22],[71,205,91],[235,186,67],[234,88,91],[159,112,201],[67,94,104]];
 var seasons=[
@@ -119,11 +119,23 @@ function neighborGene(i,t){
   for(dy=-1;dy<=1;dy++)for(dx=-1;dx<=1;dx++)if(dx||dy){j=id(x+dx,y+dy);if(type[j]===t)a.push(gene[j])}
   return a.length?a[(Math.random()*a.length)|0]:128;
 }
-function mutate(g,rate){if(Math.random()<rate)g+=Math.round(rnd(19,-19));else g+=Math.round(rnd(3,-3));return clamp(g,20,235)}
+function mutate(g,rate){
+  var major=Math.random()<rate;
+  if(major){g+=Math.round(rnd(64,-64));mutationCount++}
+  else g+=Math.round(rnd(5,-5));
+  return clamp(g,20,235);
+}
+function phenotype(t,g){
+  if(t===1)return g<90?'耐久型':g>170?'高速成長型':'均衡型';
+  if(t===2)return g<90?'省エネ型':g>170?'大食型':'均衡型';
+  if(t===3)return g<90?'持久型':g>170?'強襲型':'均衡型';
+  if(t===4)return g<90?'長寿型':g>170?'高速分解型':'均衡型';
+  return '';
+}
 function init(){
   type=new Uint8Array(N);energy=new Float32Array(N);age=new Uint16Array(N);gene=new Uint8Array(N);nutrient=new Float32Array(N);
   nextType=new Uint8Array(N);nextEnergy=new Float32Array(N);nextAge=new Uint16Array(N);nextGene=new Uint8Array(N);nextNut=new Float32Array(N);
-  gen=0;seasonIndex=0;seasonTick=0;eventTick=0;history=[];logs=[];
+  gen=0;seasonIndex=0;seasonTick=0;eventTick=0;history=[];logs=[];mutationCount=0;
   var i,x,y,n;
   for(i=0;i<N;i++){
     x=i%W;y=(i/W)|0;
@@ -212,20 +224,22 @@ function step(){
     }
 
     if(t===1){
-      e=energy[i]+(.028+.00007*gene[i])*s.plant*(.35+.65*nutrient[i])-.010;
-      nextNut[i]=Math.max(0,nextNut[i]-(.006+.000014*gene[i]));
-      if(g>0 && Math.random()<g*(.026+.000045*(220-gene[i]))*s.graze){
+      e=energy[i]+(.020+.000115*gene[i])*s.plant*(.35+.65*nutrient[i])-(.006+.000025*gene[i]);
+      nextNut[i]=Math.max(0,nextNut[i]-(.004+.000027*gene[i]));
+      var grazerGene=neighborGene(i,2);
+      if(g>0 && Math.random()<g*(.015+.000075*grazerGene)*s.graze){
         nextType[i]=2;nextEnergy[i]=clamp(.48+energy[i]*.24,0,1.2);nextGene[i]=mutate(neighborGene(i,2),.018);nextAge[i]=0;
-      }else if((p>=7 && Math.random()<.16)||e<=.04||age[i]>900+gene[i]*3){
+      }else if((p>=7 && Math.random()<.16)||e<=.04||age[i]>(1550-gene[i]*3)){
         dieToDecomposer(i,.30+.05*d);
       }else nextEnergy[i]=clamp(e,0,1.25);
       continue;
     }
 
     if(t===2){
-      e=energy[i]-(.018+.00003*gene[i]);
-      if(p>0)e+=.034*Math.min(4,p);
-      if(h>0 && Math.random()<h*(.031+.000035*gene[i])){
+      e=energy[i]-(.011+.000055*gene[i]);
+      if(p>0)e+=(.020+.00011*gene[i])*Math.min(4,p);
+      var predatorGene=neighborGene(i,3);
+      if(h>0 && Math.random()<h*(.012+.000075*predatorGene)){
         nextType[i]=3;nextEnergy[i]=clamp(.5+energy[i]*.22,0,1.2);nextGene[i]=mutate(neighborGene(i,3),.018);nextAge[i]=0;
       }else if(e<.05 || (p===0&&age[i]>48+gene[i]*.45)){
         dieToDecomposer(i,.48);
@@ -236,8 +250,8 @@ function step(){
     }
 
     if(t===3){
-      e=energy[i]-(.021+.000028*gene[i]);
-      if(g>0)e+=.045*Math.min(4,g);
+      e=energy[i]-(.012+.00006*gene[i]);
+      if(g>0)e+=(.026+.00013*gene[i])*Math.min(4,g);
       if(e<.045 || (g===0&&age[i]>42+gene[i]*.42)){
         dieToDecomposer(i,.62);
       }else if(h>5&&g<2&&Math.random()<.045){
@@ -247,9 +261,9 @@ function step(){
     }
 
     if(t===4){
-      e=energy[i]-.022/s.decay;
-      nextNut[i]=clamp(nextNut[i]+.018*s.decay,0,1.4);
-      if(e<=.025||age[i]>36+gene[i]*.34){
+      e=energy[i]-(.012+.000045*gene[i])/s.decay;
+      nextNut[i]=clamp(nextNut[i]+(.009+.000065*gene[i])*s.decay,0,1.4);
+      if(e<=.025||age[i]>(118-gene[i]*.34)){
         nextType[i]=0;nextEnergy[i]=0;nextAge[i]=0;nextNut[i]=clamp(nextNut[i]+.20,0,1.4);
       }else nextEnergy[i]=e;
     }
@@ -299,11 +313,11 @@ function updateUI(){
   document.getElementById('season').textContent=seasons[seasonIndex].n;
   var present=[1,2,3,4].filter(function(t){return c.a[t]>8}).length;
   var spread=Math.round((Math.max.apply(null,c.avg.slice(1))-Math.min.apply(null,c.avg.slice(1)))/2.15);
-  document.getElementById('diversity').textContent='DIVERSITY '+present+'/4 · MUT '+spread;
+  document.getElementById('diversity').textContent='DIVERSITY '+present+'/4 · MUT '+mutationCount+' · Δ'+spread;
   document.getElementById('phase').textContent=ph[0];document.getElementById('phaseText').textContent=ph[1];
   var lab=['','植物','草食','捕食','分解者'],col=['', '#65d96d','#f0c85b','#f07171','#b08ad9'];
   document.getElementById('stats').innerHTML=[1,2,3,4].map(function(t){
-    return '<div class="stat"><i class="dot" style="background:'+col[t]+'"></i><div><b>'+lab[t]+'</b> <span class="muted">gene '+Math.round(c.avg[t])+'</span><div class="bar"><i style="width:'+Math.round(c.a[t]/max*100)+'%;background:'+col[t]+'"></i></div></div><b>'+c.a[t]+'</b></div>';
+    return '<div class="stat"><i class="dot" style="background:'+col[t]+'"></i><div><b>'+lab[t]+'</b> <span class="muted">'+phenotype(t,c.avg[t])+' · gene '+Math.round(c.avg[t])+'</span><div class="bar"><i style="width:'+Math.round(c.a[t]/max*100)+'%;background:'+col[t]+'"></i></div></div><b>'+c.a[t]+'</b></div>';
   }).join('');
   document.getElementById('feed').innerHTML=logs.map(function(e){return '<div class="ev"><small>GEN '+e.g+'</small>'+e.s+'</div>'}).join('');
   drawChart();
@@ -321,9 +335,10 @@ function draw(){
         d[k+2]=Math.min(255,Math.round(colors[t][2]*b));
       }else{
         b=clamp(.52+energy[i]*.55,.45,1.18);
-        d[k]=Math.min(255,Math.round(colors[t][0]*b));
-        d[k+1]=Math.min(255,Math.round(colors[t][1]*b));
-        d[k+2]=Math.min(255,Math.round(colors[t][2]*b));
+        var gv=(gene[i]-128)/127;
+        d[k]=Math.min(255,Math.max(0,Math.round(colors[t][0]*b+gv*24)));
+        d[k+1]=Math.min(255,Math.max(0,Math.round(colors[t][1]*b-gv*8)));
+        d[k+2]=Math.min(255,Math.max(0,Math.round(colors[t][2]*b-gv*20)));
       }
     }
     d[k+3]=255;k+=4;
