@@ -92,7 +92,7 @@ function makeFloor(f){
  return{grid:grid,events:events,stairs:stairs};
 }
 function farthest(grid,sx,sy){
- var q=[[sx,sy]],dist=new Int16Array(W*H);dist.fill(-1);dist[key(sx,sy)]=0,b=[sx,sy];
+ var q=[[sx,sy]],dist=new Int16Array(W*H),b=[sx,sy];dist.fill(-1);dist[key(sx,sy)]=0;
  while(q.length){var c=q.shift();if(dist[key(c[0],c[1])]>dist[key(b[0],b[1])])b=c;for(var d=0;d<4;d++){var nx=c[0]+DIRS[d][0],ny=c[1]+DIRS[d][1],ii=inside(nx,ny)?key(nx,ny):-1;if(ii>=0&&grid[ii]&&dist[ii]<0){dist[ii]=dist[key(c[0],c[1])]+1;q.push([nx,ny])}}}
  return b;
 }
