@@ -1,0 +1,917 @@
+(() => {
+"use strict";
+
+const $=id=>document.getElementById(id);
+const canvas=$("simCanvas"),ctx=canvas.getContext("2d");
+const newWarButton=$("newWarButton"),speedButton=$("speedButton");
+const timeText=$("timeText"),controlText=$("controlText"),unitsText=$("unitsText"),statusText=$("statusText");
+const battleLog=$("battleLog");
+const emberDoctrine=$("emberDoctrine"),azureDoctrine=$("azureDoctrine");
+const emberTraits=$("emberTraits"),azureTraits=$("azureTraits");
+const emberThought=$("emberThought"),azureThought=$("azureThought");
+const emberMemory=$("emberMemory"),azureMemory=$("azureMemory");
+
+const W=960,H=600;
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+const FACTION_COLORS={EMBER:"#e3644e",AZURE:"#5aa0e8"};
+const DOCTRINES=["ATTACK","DEFEND","EXPAND","RAID","REGROUP"];
+const DOCTRINE_JA={ATTACK:"攻勢",DEFEND:"防衛",EXPAND:"拡張",RAID:"奇襲",REGROUP:"再編"};
+const TRAIT_JA={AGGRESSION:"攻撃性",CAUTION:"慎重さ",COORDINATION:"連携",LOGISTICS:"補給",ADAPTABILITY:"適応力"};
+const NODE_TYPES={
+  SUPPLY:{label:"補給拠点",mark:"補",color:"#d6b85f",desc:"補給収入を大幅増加"},
+  MEDIC:{label:"医療拠点",mark:"医",color:"#78c98b",desc:"広範囲の負傷兵を高速回復"},
+  COMMAND:{label:"指揮拠点",mark:"指",color:"#b58ade",desc:"周囲の火力と移動力を強化"},
+  FACTORY:{label:"生産拠点",mark:"生",color:"#e48b63",desc:"増援を高速生産し現地出撃"},
+  ARTILLERY:{label:"砲撃拠点",mark:"砲",color:"#d86b6b",desc:"超長距離の範囲砲撃"},
+  DEFENSE:{label:"防衛要塞",mark:"防",color:"#8fc7d9",desc:"強力な防御・回復・退避拠点"}
+};
+
+let running=false,last=performance.now(),simTime=0,timeScale=1,logs=[];
+let nodes=[],units=[],factions={},shotEffects=[];
+
+function makeFaction(name,traits,base){
+  return{
+    name,...traits,
+    supply:30,score:0,doctrine:"EXPAND",thought:"初期配置を確認中",
+    memory:"適応履歴なし",nextThink:0,recentLosses:0,kills:0,losses:0,
+    doctrineBias:{ATTACK:0,DEFEND:0,EXPAND:0,RAID:0,REGROUP:0},
+    lastEval:{control:0,kills:0,losses:0},
+    base,
+    spawnTimer:0,
+    builtNode:false,
+    builtNodeType:null,
+    buildAfter:rnd(6,16),
+    emergencyDefenseBuilt:false,
+    defenseBuildAfter:rnd(10,18),
+    nextGarrisonReview:0
+  };
+}
+function balancedTraitPair(){
+  const base=.62;
+  const overallSkew=rnd(-.018,.018);
+  let d;
+  do{
+    d=[rnd(-.24,.24),rnd(-.24,.24),rnd(-.24,.24),rnd(-.24,.24)];
+    d.push(-(d[0]+d[1]+d[2]+d[3]));
+  }while(Math.abs(d[4])>.24 || d.every(v=>Math.abs(v)<.07));
+  const keys=["aggression","caution","coordination","logistics","adaptability"];
+  const ember={},azure={};
+  keys.forEach((k,i)=>{
+    ember[k]=clamp(base+d[i]+overallSkew,.28,.94);
+    azure[k]=clamp(base-d[i]-overallSkew,.28,.94);
+  });
+  return{ember,azure};
+}
+
+function reset(){
+  simTime=0;logs=[];units=[];nodes=[];shotEffects=[];
+  const pair=balancedTraitPair();
+  const emberLeft=Math.random()<.5;
+  const leftBase={x:70,y:H/2},rightBase={x:W-70,y:H/2};
+  factions={
+    EMBER:makeFaction("EMBER",pair.ember,emberLeft?leftBase:rightBase),
+    AZURE:makeFaction("AZURE",pair.azure,emberLeft?rightBase:leftBase)
+  };
+  createNodes();
+  for(let i=0;i<18;i++){spawnUnit("EMBER",true);spawnUnit("AZURE",true)}
+  factions.EMBER.supply=20;factions.AZURE.supply=20;
+  renderTraits();log("新しい戦局を開始 · 総合力は近く、長所・短所と小さな能力差を再生成");
+  running=true;statusText.textContent="稼働中";updateUI();
+}
+
+function createNodes(){
+  const specs=[
+    [W*.22,H*.25,"SUPPLY"],[W*.78,H*.25,"SUPPLY"],
+    [W*.22,H*.75,"MEDIC"],[W*.78,H*.75,"MEDIC"],
+    [W*.38,H*.50,"COMMAND"],[W*.62,H*.50,"COMMAND"],
+    [W*.50,H*.22,"FACTORY"],[W*.50,H*.78,"FACTORY"]
+  ];
+  for(let i=specs.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[specs[i],specs[j]]=[specs[j],specs[i]]}
+  nodes=specs.map((p,i)=>({id:i,x:p[0],y:p[1],type:p[2],owner:null,capture:0,value:1}));
+}
+
+function chooseBuildType(side){
+  const f=factions[side],m=strategicMetrics(side);
+  const scores={
+    SUPPLY:1.0+f.logistics*.9+(m.supply<14?1.4:0)+(m.supplyNodes===0?.35:0),
+    MEDIC:.8+f.caution*.8+m.hurt*2.0+(m.medicNodes===0?.25:0),
+    COMMAND:.8+f.aggression*.85+f.coordination*.75+((f.doctrine==="ATTACK"||f.doctrine==="RAID") ? .9 : 0)+(m.commandNodes===0?.2:0),
+    FACTORY:.9+f.logistics*.65+(m.armyRatio<.9?1.4:0)+(living(side).length<18?.55:0)+(m.factoryNodes===0?.25:0),
+    ARTILLERY:.75+f.aggression*.95+f.adaptability*.35+((f.doctrine==="ATTACK"||f.doctrine==="RAID") ? 1.15 : 0)+(enemies(side).length>20?.35:0)+(m.artilleryNodes===0?.25:0)
+  };
+  return Object.keys(scores).sort((a,b)=>scores[b]-scores[a])[0];
+}
+function validBuildPosition(side,x,y){
+  if(x<48||x>W-48||y<42||y>H-42)return false;
+  if(nodes.some(n=>Math.hypot(x-n.x,y-n.y)<54))return false;
+  const own=factions[side].base,enemy=factions[enemySide(side)].base;
+  if(Math.hypot(x-own.x,y-own.y)<72)return false;
+  if(Math.hypot(x-enemy.x,y-enemy.y)<105)return false;
+  return true;
+}
+function chooseBuildPosition(side,type){
+  const f=factions[side],enemy=factions[enemySide(side)],dx=enemy.base.x-f.base.x,dy=enemy.base.y-f.base.y;
+  const len=Math.hypot(dx,dy)||1,ux=dx/len,uy=dy/len,px=-uy,py=ux;
+  const ranges={
+    SUPPLY:[105,175,90],
+    FACTORY:[115,190,95],
+    MEDIC:[155,245,120],
+    COMMAND:[205,315,135],
+    ARTILLERY:[150,235,110],
+    DEFENSE:[85,155,90]
+  };
+  const [minF,maxF,lateral]=ranges[type];
+  let best=null,bestScore=-Infinity;
+  for(let i=0;i<70;i++){
+    const forward=rnd(minF,maxF),sideOff=rnd(-lateral,lateral);
+    const x=f.base.x+ux*forward+px*sideOff,y=f.base.y+uy*forward+py*sideOff;
+    if(!validBuildPosition(side,x,y))continue;
+    const friend=nearbyStrength(side,{x,y},95),foe=nearbyStrength(enemySide(side),{x,y},95);
+    let score=rnd(-8,8);
+    if(type==="SUPPLY"||type==="FACTORY")score+=friend*5-foe*9-Math.hypot(x-f.base.x,y-f.base.y)*.025;
+    else if(type==="MEDIC")score+=friend*7-foe*4-Math.abs(Math.hypot(x-f.base.x,y-f.base.y)-205)*.035;
+    else if(type==="ARTILLERY")score+=friend*3-foe*6-Math.abs(Math.hypot(x-f.base.x,y-f.base.y)-190)*.045;
+    else if(type==="DEFENSE")score+=friend*5+foe*2-Math.abs(Math.hypot(x-f.base.x,y-f.base.y)-115)*.065;
+    else score+=friend*4-foe*2+Math.hypot(x-f.base.x,y-f.base.y)*.025;
+    if(score>bestScore){bestScore=score;best={x,y}}
+  }
+  return best;
+}
+function tryBuildFactionNode(side){
+  const f=factions[side];
+  if(f.builtNode||simTime<f.buildAfter)return false;
+  const type=chooseBuildType(side),cost=type==="ARTILLERY"?12:9;
+  if(f.supply<cost)return false;
+  const pos=chooseBuildPosition(side,type);
+  if(!pos){f.buildAfter=simTime+rnd(4,8);return false}
+  f.supply-=cost;f.builtNode=true;f.builtNodeType=type;
+  f.nextGarrisonReview=0;
+  nodes.push({
+    id:(side==="EMBER"?"E":"A")+"-BUILD",x:pos.x,y:pos.y,type,owner:side,capture:0,value:1,aiBuilt:true,
+    fireCooldown:type==="ARTILLERY"?rnd(1.0,2.2):0
+  });
+  const name=side==="EMBER"?"エンバー":"アズール";
+  log(name+"AIが"+NODE_TYPES[type].label+"を建設");
+  f.memory="自律建設 · "+NODE_TYPES[type].label+"を選択";
+  return true;
+}
+
+function nearestOwnedDefense(side,p){
+  const forts=nodes.filter(n=>n.owner===side&&n.type==="DEFENSE");
+  return forts.length?nearest(forts,p):null;
+}
+function nearestOwnedRecoveryNode(side,p){
+  const candidates=nodes.filter(n=>n.owner===side&&(n.type==="DEFENSE"||n.type==="MEDIC"));
+  return candidates.length?nearest(candidates,p):null;
+}
+function defenseAuraMultiplier(side,p){
+  return nodes.some(n=>n.owner===side&&n.type==="DEFENSE"&&Math.hypot(n.x-p.x,n.y-p.y)<115)?.65:1;
+}
+function emergencyDefenseNeed(side){
+  const f=factions[side],m=strategicMetrics(side);
+  return m.nearBase*.42
+    +Math.max(0,1-m.armyRatio)*2.0
+    +m.hurt*1.8
+    +Math.max(0,f.losses-f.kills)*.06
+    +((f.doctrine==="DEFEND"||f.doctrine==="REGROUP")?.75:0);
+}
+function tryBuildEmergencyDefense(side){
+  const f=factions[side];
+  if(f.emergencyDefenseBuilt||simTime<f.defenseBuildAfter||f.supply<10)return false;
+  const need=emergencyDefenseNeed(side);
+  if(need<1.15)return false;
+  const pos=chooseBuildPosition(side,"DEFENSE");
+  if(!pos){f.defenseBuildAfter=simTime+rnd(3,6);return false}
+  f.supply-=10;f.emergencyDefenseBuilt=true;
+  f.nextGarrisonReview=0;
+  nodes.push({
+    id:(side==="EMBER"?"E":"A")+"-FORT",x:pos.x,y:pos.y,type:"DEFENSE",
+    owner:side,capture:0,value:1,aiBuilt:true,fortress:true
+  });
+  const name=side==="EMBER"?"エンバー":"アズール";
+  log(name+"AIが緊急防衛要塞を建設");
+  f.memory="緊急防衛 · 防衛要塞を建設";
+  return true;
+}
+
+function spawnUnit(side,free=false,spawnAt=null){
+  const f=factions[side];if(!f)return;
+  const cost=6;if(!free&&f.supply<cost)return false;
+  if(!free)f.supply-=cost;
+  const roleRoll=Math.random();
+  let role="LINE";
+  if(roleRoll<.18+.12*(1-f.aggression))role="SCOUT";
+  else if(roleRoll>.82-.14*f.coordination)role="SUPPORT";
+  const origin=spawnAt||f.base;
+  units.push({
+    side,role,x:origin.x+rnd(-12,12),y:origin.y+rnd(-24,24),
+    vx:0,vy:0,hp:role==="LINE"?100:(role==="SCOUT"?70:85),
+    maxHp:role==="LINE"?100:(role==="SCOUT"?70:85),target:null,mode:"IDLE",
+    think:rnd(.15,.7),cooldown:0,knownEnemy:null,
+    garrisonNode:null,garrisonAngle:rnd(0,Math.PI*2),garrisonRadius:rnd(18,38)
+  });
+  return true;
+}
+
+function renderTraits(){
+  for(const side of ["EMBER","AZURE"]){
+    const f=factions[side],el=side==="EMBER"?emberTraits:azureTraits;
+    const traits=[
+      ["AGGRESSION",f.aggression],["CAUTION",f.caution],["COORDINATION",f.coordination],
+      ["LOGISTICS",f.logistics],["ADAPTABILITY",f.adaptability]
+    ];
+    el.innerHTML=traits.map(([n,v])=>'<div class="trait"><span>'+TRAIT_JA[n]+'</span><div class="bar"><i style="width:'+Math.round(v*100)+'%"></i></div><b>'+Math.round(v*100)+'</b></div>').join("");
+  }
+}
+
+function log(msg){
+  logs.unshift(msg);if(logs.length>8)logs.length=8;
+  battleLog.innerHTML=logs.map(x=>"<span>"+x+"</span>").join("");
+}
+
+function ownedNodes(side){return nodes.filter(n=>n.owner===side).length}
+function ownedNodesOfType(side,type){return nodes.filter(n=>n.owner===side&&n.type===type).length}
+function nodeAbilitySummary(side){
+  const order=["SUPPLY","MEDIC","COMMAND","FACTORY","ARTILLERY","DEFENSE"];
+  return order.map(t=>NODE_TYPES[t].mark+ownedNodesOfType(side,t)).join(" ");
+}
+function living(side){return units.filter(u=>u.side===side&&u.hp>0)}
+function enemies(side){return living(side==="EMBER"?"AZURE":"EMBER")}
+function enemySide(side){return side==="EMBER"?"AZURE":"EMBER"}
+
+function strategicMetrics(side){
+  const f=factions[side],enemy=factions[enemySide(side)];
+  const own=living(side),foe=living(enemySide(side));
+  const nearBase=foe.filter(u=>Math.hypot(u.x-f.base.x,u.y-f.base.y)<150).length;
+  const armyRatio=own.length/Math.max(1,foe.length);
+  const nodeRatio=ownedNodes(side)/Math.max(1,nodes.length);
+  const enemyNodeRatio=ownedNodes(enemySide(side))/Math.max(1,nodes.length);
+  const hurt=own.filter(u=>u.hp/u.maxHp<.45).length/Math.max(1,own.length);
+  return{
+    nearBase,armyRatio,nodeRatio,enemyNodeRatio,hurt,supply:f.supply,
+    supplyNodes:ownedNodesOfType(side,"SUPPLY"),
+    medicNodes:ownedNodesOfType(side,"MEDIC"),
+    commandNodes:ownedNodesOfType(side,"COMMAND"),
+    factoryNodes:ownedNodesOfType(side,"FACTORY"),
+    artilleryNodes:ownedNodesOfType(side,"ARTILLERY"),
+    defenseNodes:ownedNodesOfType(side,"DEFENSE")
+  };
+}
+
+function thinkFaction(side){
+  const f=factions[side],m=strategicMetrics(side);
+  tryBuildFactionNode(side);
+  const u={};
+  u.ATTACK=38+f.aggression*42+(m.armyRatio-1)*24+m.nodeRatio*9-f.caution*m.hurt*26;
+  u.DEFEND=24+f.caution*35+m.nearBase*9+(1-m.armyRatio)*22+f.coordination*8;
+  u.EXPAND=30+f.logistics*27+(1-m.nodeRatio-m.enemyNodeRatio)*32+f.coordination*10;
+  u.RAID=18+f.aggression*18+f.adaptability*15+(m.armyRatio>.85?8:0)+f.coordination*8;
+  u.REGROUP=12+f.caution*24+m.hurt*42+(1-m.armyRatio)*30+(f.supply>18?8:0);
+  for(const d of DOCTRINES)u[d]+=f.doctrineBias[d]||0;
+
+  const old=f.doctrine;
+  f.doctrine=DOCTRINES.slice().sort((a,b)=>u[b]-u[a])[0];
+  if(old!==f.doctrine)log((side==="EMBER"?"エンバー":"アズール")+" 方針変更 · "+DOCTRINE_JA[old]+" → "+DOCTRINE_JA[f.doctrine]);
+
+  const reasons={
+    ATTACK:"戦力優勢を利用して敵陣へ圧力をかける",
+    DEFEND:"自陣への圧力を優先して防衛線を形成する",
+    EXPAND:"中立拠点を確保して補給基盤を広げる",
+    RAID:"正面衝突を避け、薄い拠点を狙う",
+    REGROUP:"損耗を抑えて味方の密度を戻す"
+  };
+  f.thought=reasons[f.doctrine];
+
+  const control=ownedNodes(side),deltaControl=control-f.lastEval.control;
+  const deltaKills=f.kills-f.lastEval.kills,deltaLosses=f.losses-f.lastEval.losses;
+  const reward=deltaControl*1.4+deltaKills*.35-deltaLosses*.42;
+  if(Math.abs(reward)>.2){
+    const learn=reward*f.adaptability*1.8;
+    f.doctrineBias[old]=clamp((f.doctrineBias[old]||0)+learn,-12,12);
+    f.memory=(reward>=0?"成功":"失敗")+"から学習 · "+DOCTRINE_JA[old]+"の選択傾向 "+(f.doctrineBias[old]>=0?"+":"")+f.doctrineBias[old].toFixed(1);
+  }
+  f.lastEval={control,kills:f.kills,losses:f.losses};
+  f.nextThink=simTime+rnd(1.8,3.6)*(1.25-f.adaptability*.35);
+}
+
+function nearest(arr,u){let best=null,bd=Infinity;for(const x of arr){const d=Math.hypot(x.x-u.x,x.y-u.y);if(d<bd){bd=d;best=x}}return best}
+function weakestEnemyNode(side){
+  const targetSide=enemySide(side);
+  const candidates=nodes.filter(n=>n.owner===targetSide);
+  if(!candidates.length)return null;
+  candidates.sort((a,b)=>nearbyStrength(side,a,90)-nearbyStrength(side,b,90));
+  return candidates[0];
+}
+function commandAura(side,p){
+  return nodes.some(n=>n.owner===side&&n.type==="COMMAND"&&Math.hypot(n.x-p.x,n.y-p.y)<110)?1.22:1;
+}
+function commandSpeedAura(side,p){
+  return nodes.some(n=>n.owner===side&&n.type==="COMMAND"&&Math.hypot(n.x-p.x,n.y-p.y)<110)?1.10:1;
+}
+function nearbyStrength(side,p,r){
+  const aura=commandAura(side,p);
+  return living(side).filter(u=>Math.hypot(u.x-p.x,u.y-p.y)<r).reduce((s,u)=>s+(u.hp/u.maxHp)*(u.role==="LINE"?1.15:(u.role==="SUPPORT"?.85:.70)),0)*aura;
+}
+function nodeStrategicValue(side,n){
+  const f=factions[side],m=strategicMetrics(side);
+  let v=1;
+  if(n.type==="SUPPLY")v+=.90+f.logistics*.75+(m.supply<16?.90:0);
+  if(n.type==="MEDIC")v+=.70+f.caution*.60+m.hurt*1.25;
+  if(n.type==="COMMAND")v+=.75+f.aggression*.55+f.coordination*.70+(f.doctrine==="ATTACK"?.55:0);
+  if(n.type==="FACTORY")v+=.80+f.logistics*.65+(m.armyRatio<.9?1.0:0);
+  if(n.type==="ARTILLERY")v+=.90+f.aggression*.70+f.adaptability*.35+((f.doctrine==="ATTACK"||f.doctrine==="RAID") ? .65 : 0);
+  if(n.type==="DEFENSE")v+=.90+f.caution*.75+f.coordination*.35+((f.doctrine==="DEFEND"||f.doctrine==="REGROUP") ? .80 : 0);
+  if(n.owner===enemySide(side))v+=.22;
+  return v;
+}
+function chooseNodeTarget(side,u,candidates){
+  let best=null,bestScore=-Infinity;
+  for(const n of candidates){
+    const d=Math.hypot(n.x-u.x,n.y-u.y);
+    const score=nodeStrategicValue(side,n)*95-d+rnd(-5,5);
+    if(score>bestScore){bestScore=score;best=n}
+  }
+  return best;
+}
+
+function garrisonBaseNeed(node){
+  if(node.type==="SUPPLY")return 1;
+  if(node.type==="MEDIC")return 2;
+  if(node.type==="FACTORY")return 2;
+  if(node.type==="COMMAND")return 2;
+  if(node.type==="ARTILLERY")return 3;
+  if(node.type==="DEFENSE")return 5;
+  return 1;
+}
+function nodeFrontlineScore(side,node){
+  const own=factions[side].base,enemy=factions[enemySide(side)].base;
+  const dOwn=Math.hypot(node.x-own.x,node.y-own.y);
+  const dEnemy=Math.hypot(node.x-enemy.x,node.y-enemy.y);
+  const nearbyEnemy=enemies(side).filter(e=>Math.hypot(e.x-node.x,e.y-node.y)<170).length;
+  return clamp((dOwn-dEnemy+260)/520,0,1)+Math.min(.8,nearbyEnemy*.16);
+}
+function garrisonNodePriority(side,node){
+  let p={SUPPLY:1.0,MEDIC:1.15,FACTORY:1.35,COMMAND:1.45,ARTILLERY:1.85,DEFENSE:2.15}[node.type]||1;
+  p+=nodeFrontlineScore(side,node)*1.15;
+  const nearEnemy=enemies(side).filter(e=>Math.hypot(e.x-node.x,e.y-node.y)<145).length;
+  p+=Math.min(1.2,nearEnemy*.22);
+  if(node.aiBuilt)p+=.18;
+  return p;
+}
+function desiredGarrisonBudget(side){
+  const f=factions[side],count=living(side).length;
+  let share=.14+f.caution*.18-f.aggression*.07;
+  if(f.doctrine==="DEFEND")share+=.08;
+  if(f.doctrine==="REGROUP")share+=.05;
+  if(f.doctrine==="ATTACK")share-=.03;
+  share=clamp(share,.12,.34);
+  return clamp(Math.round(count*share),count>7?2:0,Math.max(0,count-4));
+}
+function clearInvalidGarrisons(side){
+  for(const u of living(side)){
+    if(u.garrisonNode&&u.garrisonNode.owner!==side){
+      u.garrisonNode=null;
+      if(u.mode==="GARRISON"||u.mode==="GARRISON_INTERCEPT")u.mode="IDLE";
+    }
+  }
+}
+function reviewGarrisons(side){
+  const f=factions[side];
+  clearInvalidGarrisons(side);
+  const army=living(side);
+  const owned=nodes.filter(n=>n.owner===side);
+  if(!owned.length){
+    for(const u of army)u.garrisonNode=null;
+    f.nextGarrisonReview=simTime+rnd(2.6,3.8);
+    return;
+  }
+
+  const budget=desiredGarrisonBudget(side);
+  const slots=[];
+  const ranked=owned.map(n=>{
+    let need=garrisonBaseNeed(n);
+    const front=nodeFrontlineScore(side,n);
+    if(front>.72)need+=2;
+    else if(front>.42)need+=1;
+    if(enemies(side).some(e=>Math.hypot(e.x-n.x,e.y-n.y)<130))need+=1;
+    return{node:n,need,priority:garrisonNodePriority(side,n)};
+  }).sort((a,b)=>b.priority-a.priority);
+
+  for(const item of ranked){
+    for(let i=0;i<item.need;i++)slots.push({node:item.node,score:item.priority-i*.07});
+  }
+  slots.sort((a,b)=>b.score-a.score);
+  slots.length=Math.min(slots.length,budget);
+
+  const desiredCounts=new Map();
+  for(const slot of slots)desiredCounts.set(slot.node,(desiredCounts.get(slot.node)||0)+1);
+
+  const selected=new Set();
+  const assignments=new Map();
+
+  // Keep valid current guards first. This prevents the whole garrison from
+  // marching across the map every time node priorities change slightly.
+  for(const [node,count] of desiredCounts){
+    const existing=army
+      .filter(u=>u.garrisonNode===node&&u.hp/u.maxHp>=.38)
+      .sort((a,b)=>Math.hypot(a.x-node.x,a.y-node.y)-Math.hypot(b.x-node.x,b.y-node.y));
+    for(const u of existing.slice(0,count)){
+      selected.add(u);
+      assignments.set(u,node);
+    }
+  }
+
+  // Fill only the remaining vacancies with nearby mobile units.
+  const remainingSlots=[];
+  for(const slot of slots){
+    const already=[...assignments.values()].filter(n=>n===slot.node).length;
+    const queued=remainingSlots.filter(s=>s.node===slot.node).length;
+    if(already+queued<(desiredCounts.get(slot.node)||0))remainingSlots.push(slot);
+  }
+
+  for(const slot of remainingSlots){
+    let best=null,bestCost=Infinity;
+    for(const u of army){
+      if(selected.has(u)||u.hp/u.maxHp<.38)continue;
+      const rolePenalty=u.role==="SCOUT"?34:(u.role==="SUPPORT"?10:0);
+      const reassignmentPenalty=u.garrisonNode&&u.garrisonNode!==slot.node?72:0;
+      const cost=Math.hypot(u.x-slot.node.x,u.y-slot.node.y)+rolePenalty+reassignmentPenalty;
+      if(cost<bestCost){bestCost=cost;best=u}
+    }
+    if(best){
+      selected.add(best);
+      assignments.set(best,slot.node);
+    }
+  }
+
+  for(const u of army){
+    const next=assignments.get(u)||null;
+    if(u.garrisonNode!==next){
+      u.garrisonNode=next;
+      if(next){
+        u.garrisonAngle=rnd(0,Math.PI*2);
+        u.garrisonRadius=rnd(18,38);
+        u.think=0;
+      }else if(u.mode==="GARRISON"||u.mode==="GARRISON_INTERCEPT"){
+        u.mode="IDLE";u.think=0;
+      }
+    }
+  }
+  f.nextGarrisonReview=simTime+rnd(2.6,3.8);
+}
+function garrisonCount(side){
+  return living(side).filter(u=>u.garrisonNode&&u.garrisonNode.owner===side).length;
+}
+function garrisonPatrolPoint(u,node){
+  return{
+    x:node.x+Math.cos(u.garrisonAngle)*u.garrisonRadius,
+    y:node.y+Math.sin(u.garrisonAngle)*u.garrisonRadius
+  };
+}
+
+function assignUnit(u){
+  const f=factions[u.side],foe=enemies(u.side),enemy=factions[enemySide(u.side)];
+  const hp=u.hp/u.maxHp;
+  if(hp<.25+.25*f.caution){
+    u.mode="RETREAT";
+    u.target=nearestOwnedRecoveryNode(u.side,u)||f.base;
+    return;
+  }
+
+  if(u.garrisonNode&&u.garrisonNode.owner===u.side){
+    const node=u.garrisonNode;
+    const leash=82+(node.type==="DEFENSE"?24:0);
+    const dNode=Math.hypot(u.x-node.x,u.y-node.y);
+    const threats=foe.filter(e=>Math.hypot(e.x-node.x,e.y-node.y)<leash+35);
+    if(dNode>leash){
+      u.mode="GARRISON";
+      u.target=node;
+      return;
+    }
+    if(threats.length){
+      u.mode="GARRISON_INTERCEPT";
+      u.target=nearest(threats,u);
+      return;
+    }
+    u.mode="GARRISON";
+    const p=garrisonPatrolPoint(u,node);
+    if(Math.hypot(u.x-p.x,u.y-p.y)<9){
+      u.garrisonAngle+=rnd(.65,1.55);
+      u.garrisonRadius=rnd(18,38);
+    }
+    u.target=garrisonPatrolPoint(u,node);
+    return;
+  }
+
+  if(u.role==="SUPPORT"&&f.coordination>.55){
+    const wounded=living(u.side).filter(x=>x!==u&&x.hp/x.maxHp<.65);
+    if(wounded.length){u.mode="SUPPORT";u.target=nearest(wounded,u);return}
+  }
+
+  if(f.doctrine==="DEFEND"){
+    const fort=nearestOwnedDefense(u.side,u);
+    const threats=foe.filter(e=>Math.hypot(e.x-f.base.x,e.y-f.base.y)<220);
+    u.mode=threats.length?"INTERCEPT":"GUARD";
+    u.target=threats.length?nearest(threats,u):(fort||f.base);return;
+  }
+
+  if(f.doctrine==="EXPAND"){
+    const neutral=nodes.filter(n=>n.owner!==u.side);
+    u.mode="CAPTURE";u.target=neutral.length?chooseNodeTarget(u.side,u,neutral):enemy.base;return;
+  }
+
+  if(f.doctrine==="RAID"){
+    const enemyNodes=nodes.filter(n=>n.owner===enemySide(u.side));
+    const target=enemyNodes.length?chooseNodeTarget(u.side,u,enemyNodes):weakestEnemyNode(u.side);
+    u.mode="RAID";u.target=target||enemy.base;return;
+  }
+
+  if(f.doctrine==="REGROUP"){
+    const fort=nearestOwnedDefense(u.side,u);
+    const anchor=fort||(ownedNodes(u.side).length?nearest(nodes.filter(n=>n.owner===u.side),u):f.base);
+    u.mode="REGROUP";u.target=anchor;return;
+  }
+
+  // ATTACK
+  const enemyNodes=nodes.filter(n=>n.owner===enemySide(u.side));
+  u.mode="ATTACK";u.target=enemyNodes.length?chooseNodeTarget(u.side,u,enemyNodes):enemy.base;
+}
+
+function updateUnit(u,dt){
+  if(u.hp<=0)return;
+  u.think-=dt;u.cooldown=Math.max(0,u.cooldown-dt);
+  if(u.think<=0){assignUnit(u);u.think=rnd(.35,.85)}
+
+  const foes=enemies(u.side);
+  const close=foes.filter(e=>Math.hypot(e.x-u.x,e.y-u.y)<(u.role==="SCOUT"?55:48));
+  if(close.length&&u.mode!=="RETREAT"){
+    const e=nearest(close,u);
+    u.knownEnemy=e;
+    const d=dist(u,e);
+    if(d<18){
+      const coordination=factions[u.side].coordination;
+      const friends=nearbyStrength(u.side,u,45),enemyStr=nearbyStrength(enemySide(u.side),u,45);
+      const damage=(u.role==="LINE"?17:(u.role==="SCOUT"?9:7))*(.85+coordination*.30)*(friends>=enemyStr?1.08:.92)*commandAura(u.side,u)*dt;
+      e.hp-=damage*defenseAuraMultiplier(e.side,e);
+      u.vx*=.55;u.vy*=.55;
+      return;
+    }
+    if(u.garrisonNode){
+      const leash=82+(u.garrisonNode.type==="DEFENSE"?24:0);
+      if(Math.hypot(e.x-u.garrisonNode.x,e.y-u.garrisonNode.y)<=leash+20)u.target=e;
+    }else if(factions[u.side].aggression>.45||u.mode==="INTERCEPT"){u.target=e}
+  }
+
+  if(u.role==="SUPPORT"){
+    const ally=living(u.side).filter(a=>a!==u&&a.hp<a.maxHp&&dist(a,u)<30).sort((a,b)=>a.hp/a.maxHp-b.hp/b.maxHp)[0];
+    if(ally){ally.hp=Math.min(ally.maxHp,ally.hp+7*dt*(.6+factions[u.side].coordination));}
+  }
+
+  const t=u.target;if(!t)return;
+  let dx=t.x-u.x,dy=t.y-u.y,d=Math.hypot(dx,dy)||1;
+  let speed=u.role==="SCOUT"?48:(u.role==="SUPPORT"?34:38);
+  if(u.mode==="RETREAT")speed*=1.18;
+  if(u.mode==="REGROUP")speed*=.88;
+  if(u.mode==="GARRISON")speed*=.72;
+  if(u.mode==="GARRISON_INTERCEPT")speed*=1.02;
+  speed*=commandSpeedAura(u.side,u);
+  dx/=d;dy/=d;
+
+  // Cohesion is stronger for coordinated factions.
+  const friends=living(u.side).filter(a=>a!==u&&dist(a,u)<55);
+  if(friends.length&&factions[u.side].coordination>.45){
+    let cx=0,cy=0;for(const a of friends){cx+=a.x;cy+=a.y}cx/=friends.length;cy/=friends.length;
+    const cd=Math.hypot(cx-u.x,cy-u.y)||1;
+    const pull=(factions[u.side].coordination-.4)*.30;
+    dx=dx*(1-pull)+(cx-u.x)/cd*pull;dy=dy*(1-pull)+(cy-u.y)/cd*pull;
+  }
+
+  u.vx+=(dx*speed-u.vx)*Math.min(1,dt*4);
+  u.vy+=(dy*speed-u.vy)*Math.min(1,dt*4);
+  u.x=clamp(u.x+u.vx*dt,18,W-18);u.y=clamp(u.y+u.vy*dt,18,H-18);
+}
+
+function resolveDeaths(){
+  for(const u of units){
+    if(u.hp>0)continue;
+    if(u.deadCounted)continue;
+    u.deadCounted=true;
+    factions[u.side].losses++;factions[enemySide(u.side)].kills++;
+  }
+  units=units.filter(u=>u.hp>0);
+}
+
+function updateNodes(dt){
+  for(const n of nodes){
+    const e=nearbyStrength("EMBER",n,48),a=nearbyStrength("AZURE",n,48);
+    if(Math.abs(e-a)<.15){n.capture*=Math.max(0,1-dt*.8);continue}
+    const winner=e>a?"EMBER":"AZURE",power=Math.abs(e-a);
+    if(n.owner===winner){
+      const step=dt*1.6;
+      n.capture=Math.abs(n.capture)<=step?0:n.capture-Math.sign(n.capture)*step;
+      continue;
+    }
+    const fortressResistance=(n.type==="DEFENSE"&&n.owner&&n.owner!==winner)?.40:1;
+    n.capture+=(winner==="EMBER"?1:-1)*dt*power*.38*fortressResistance;
+    if(n.capture>3.5){
+      n.owner="EMBER";n.capture=0;
+      factions.EMBER.nextGarrisonReview=0;factions.AZURE.nextGarrisonReview=0;
+      log("エンバーが"+NODE_TYPES[n.type].label+" "+n.id+" を確保")
+    }
+    else if(n.capture<-3.5){
+      n.owner="AZURE";n.capture=0;
+      factions.EMBER.nextGarrisonReview=0;factions.AZURE.nextGarrisonReview=0;
+      log("アズールが"+NODE_TYPES[n.type].label+" "+n.id+" を確保")
+    }
+  }
+}
+
+function chooseArtilleryTarget(node){
+  if(!node.owner)return null;
+  const candidates=enemies(node.owner).filter(u=>Math.hypot(u.x-node.x,u.y-node.y)<=300);
+  let best=null,bestScore=-Infinity;
+  for(const u of candidates){
+    const hp=u.hp/u.maxHp;
+    const local=enemies(node.owner).filter(e=>Math.hypot(e.x-u.x,e.y-u.y)<52).length;
+    const d=Math.hypot(u.x-node.x,u.y-node.y);
+    const score=(1-hp)*55+local*8-d*.06+rnd(-3,3);
+    if(score>bestScore){bestScore=score;best=u}
+  }
+  return best;
+}
+function fireArtillery(node,target){
+  const primary=19+rnd(-2,3);
+  target.hp-=primary*defenseAuraMultiplier(target.side,target);
+  for(const e of enemies(node.owner)){
+    if(e===target)continue;
+    if(Math.hypot(e.x-target.x,e.y-target.y)<30){
+      e.hp-=7.5*defenseAuraMultiplier(e.side,e);
+    }
+  }
+  shotEffects.push({
+    x1:node.x,y1:node.y,x2:target.x,y2:target.y,
+    side:node.owner,life:.28,splash:true
+  });
+}
+
+function updateNodeAbilities(dt){
+  for(const n of nodes){
+    if(!n.owner)continue;
+    if(n.type==="ARTILLERY"){
+      n.fireCooldown=(n.fireCooldown??rnd(.5,1.5))-dt;
+      if(n.fireCooldown<=0){
+        const target=chooseArtilleryTarget(n);
+        if(target){
+          fireArtillery(n,target);
+          n.fireCooldown=rnd(4.2,5.4);
+        }else n.fireCooldown=rnd(.9,1.5);
+      }
+    }
+  }
+  for(const side of ["EMBER","AZURE"]){
+    const medics=nodes.filter(n=>n.owner===side&&n.type==="MEDIC");
+    const forts=nodes.filter(n=>n.owner===side&&n.type==="DEFENSE");
+    if(!medics.length&&!forts.length)continue;
+    for(const u of living(side)){
+      if(u.hp>=u.maxHp)continue;
+      let heal=0;
+      for(const n of medics)if(Math.hypot(u.x-n.x,u.y-n.y)<100)heal+=10.0;
+      for(const n of forts)if(Math.hypot(u.x-n.x,u.y-n.y)<115)heal+=3.5;
+      if(heal>0)u.hp=Math.min(u.maxHp,u.hp+heal*dt);
+    }
+  }
+}
+
+function updateEconomy(dt){
+  for(const side of ["EMBER","AZURE"]){
+    const f=factions[side];
+    const supplyBonus=ownedNodesOfType(side,"SUPPLY")*1.75;
+    const income=(1+ownedNodes(side)*.35+supplyBonus)*(0.72+f.logistics*.55);
+    f.supply+=income*dt;
+    f.spawnTimer-=dt;
+    const factories=ownedNodesOfType(side,"FACTORY");
+    const maxUnits=24+Math.round(f.logistics*10)+factories*4;
+    const spawnCost=Math.max(4.2,6-factories*.65);
+    if(f.spawnTimer<=0&&living(side).length<maxUnits&&f.supply>=spawnCost){
+      f.supply-=spawnCost;
+      let spawnPoint=null;
+      const factoryNodes=nodes.filter(n=>n.owner===side&&n.type==="FACTORY");
+      if(factoryNodes.length&&Math.random()<.82){
+        factoryNodes.sort((a,b)=>{
+          const ae=enemies(side).filter(e=>Math.hypot(e.x-a.x,e.y-a.y)<115).length;
+          const be=enemies(side).filter(e=>Math.hypot(e.x-b.x,e.y-b.y)<115).length;
+          return ae-be;
+        });
+        spawnPoint=factoryNodes[0];
+      }
+      spawnUnit(side,true,spawnPoint);
+      const factorySpeed=Math.pow(.68,factories);
+      f.spawnTimer=rnd(1.7,3.3)*(1.15-f.logistics*.25)*factorySpeed;
+    }
+  }
+}
+
+function checkEnd(){
+  const candidates=[];
+  for(const side of ["EMBER","AZURE"]){
+    const enemy=enemySide(side),base=factions[enemy].base;
+    const pressure=nearbyStrength(side,base,62),def=nearbyStrength(enemy,base,62);
+    if(pressure>5.4&&pressure>def*1.6&&living(enemy).length<8){
+      candidates.push({side,score:pressure/Math.max(.25,def),pressure,def});
+    }
+  }
+  if(!candidates.length)return;
+  candidates.sort((a,b)=>b.score-a.score);
+  let winner=candidates[0].side;
+  if(candidates.length>1&&Math.abs(candidates[0].score-candidates[1].score)<.08){
+    winner=Math.random()<.5?candidates[0].side:candidates[1].side;
+  }
+  statusText.textContent=(winner==="EMBER"?"エンバー":"アズール")+" 優勢";
+  running=false;
+  log((winner==="EMBER"?"エンバー":"アズール")+" が敵司令地域を制圧");
+}
+
+function update(dt){
+  simTime+=dt;
+  for(const side of ["EMBER","AZURE"]){
+    tryBuildFactionNode(side);
+    tryBuildEmergencyDefense(side);
+    if(simTime>=factions[side].nextGarrisonReview)reviewGarrisons(side);
+    if(simTime>=factions[side].nextThink)thinkFaction(side);
+  }
+  const order=units.slice();
+  for(let i=order.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[order[i],order[j]]=[order[j],order[i]]}
+  for(const u of order)updateUnit(u,dt);
+  resolveDeaths();updateNodes(dt);updateNodeAbilities(dt);
+  shotEffects.forEach(e=>e.life-=dt);shotEffects=shotEffects.filter(e=>e.life>0);
+  updateEconomy(dt);checkEnd();
+}
+
+function drawGrid(){
+  ctx.fillStyle="#0c0e12";ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle="#14171d";ctx.lineWidth=1;
+  for(let x=0;x<W;x+=24){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke()}
+  for(let y=0;y<H;y+=24){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
+}
+
+function drawInfluence(){
+  for(const n of nodes){
+    if(!n.owner)continue;
+    const c=n.owner==="EMBER"?"rgba(227,100,78,.045)":"rgba(90,160,232,.045)";
+    ctx.fillStyle=c;ctx.beginPath();ctx.arc(n.x,n.y,72,0,Math.PI*2);ctx.fill();
+
+    const nt=NODE_TYPES[n.type];
+    let radius=0,alpha=.18;
+    if(n.type==="MEDIC")radius=100;
+    else if(n.type==="COMMAND")radius=110;
+    else if(n.type==="ARTILLERY"){radius=300;alpha=.10}
+    else if(n.type==="DEFENSE")radius=115;
+    if(radius){
+      ctx.strokeStyle=nt.color;ctx.globalAlpha=alpha;ctx.lineWidth=1;
+      ctx.beginPath();ctx.arc(n.x,n.y,radius,0,Math.PI*2);ctx.stroke();
+      ctx.globalAlpha=1;
+    }
+  }
+}
+
+function drawBases(){
+  for(const side of ["EMBER","AZURE"]){
+    const f=factions[side],c=FACTION_COLORS[side];
+    ctx.fillStyle=c;ctx.fillRect(f.base.x-7,f.base.y-18,14,36);
+    ctx.strokeStyle="#fff";ctx.globalAlpha=.28;ctx.strokeRect(f.base.x-10,f.base.y-24,20,48);ctx.globalAlpha=1;
+  }
+}
+
+function drawNodes(){
+  for(const n of nodes){
+    const nt=NODE_TYPES[n.type];
+    ctx.strokeStyle=n.owner?FACTION_COLORS[n.owner]:nt.color;ctx.lineWidth=2;ctx.strokeRect(n.x-7,n.y-7,14,14);
+    ctx.fillStyle=nt.color;ctx.globalAlpha=n.owner?.28:.12;ctx.fillRect(n.x-5,n.y-5,10,10);ctx.globalAlpha=1;
+    if(n.owner){ctx.strokeStyle=FACTION_COLORS[n.owner];ctx.strokeRect(n.x-9,n.y-9,18,18)}
+    if(n.aiBuilt){ctx.strokeStyle="#ffffff";ctx.globalAlpha=.72;ctx.strokeRect(n.x-12,n.y-12,24,24);ctx.globalAlpha=1}
+    ctx.fillStyle="#e9e7df";ctx.font="8px ui-monospace,monospace";ctx.textAlign="center";ctx.fillText(nt.mark,n.x,n.y+3);ctx.textAlign="left";
+    if(n.type==="SUPPLY"){
+      ctx.strokeStyle=nt.color;ctx.lineWidth=1;ctx.strokeRect(n.x-12,n.y-4,4,8);ctx.strokeRect(n.x+8,n.y-4,4,8);
+    }
+    if(n.type==="MEDIC"){
+      ctx.strokeStyle=nt.color;ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(n.x-12,n.y);ctx.lineTo(n.x+12,n.y);ctx.moveTo(n.x,n.y-12);ctx.lineTo(n.x,n.y+12);ctx.stroke();
+    }
+    if(n.type==="COMMAND"){
+      ctx.strokeStyle=nt.color;ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(n.x-12,n.y+10);ctx.lineTo(n.x,n.y-14);ctx.lineTo(n.x+12,n.y+10);ctx.stroke();
+    }
+    if(n.type==="FACTORY"){
+      ctx.strokeStyle=nt.color;ctx.lineWidth=1.5;ctx.strokeRect(n.x-13,n.y-10,26,20);ctx.strokeRect(n.x-5,n.y-16,5,6);
+    }
+    if(n.type==="ARTILLERY"){ctx.strokeStyle=nt.color;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(n.x,n.y-6);ctx.lineTo(n.x+10,n.y-15);ctx.stroke()}
+    if(n.type==="DEFENSE"){
+      ctx.strokeStyle=nt.color;ctx.lineWidth=1.5;ctx.globalAlpha=.35;
+      ctx.beginPath();ctx.arc(n.x,n.y,105,0,Math.PI*2);ctx.stroke();ctx.globalAlpha=1;
+      ctx.strokeStyle=nt.color;ctx.lineWidth=2;ctx.strokeRect(n.x-13,n.y-13,26,26);
+    }
+    if(n.owner){
+      const guards=living(n.owner).filter(u=>u.garrisonNode===n).length;
+      if(guards>0){
+        ctx.fillStyle="#d9dde6";ctx.font="7px ui-monospace,monospace";ctx.textAlign="center";
+        ctx.fillText("守"+guards,n.x,n.y+23);ctx.textAlign="left";
+      }
+    }
+    if(Math.abs(n.capture)>.1){
+      ctx.fillStyle=n.capture>0?FACTION_COLORS.EMBER:FACTION_COLORS.AZURE;
+      const w=clamp(Math.abs(n.capture)/3.5*18,0,18);ctx.fillRect(n.x-9,n.y+11,w,2);
+    }
+  }
+}
+
+function drawShotEffects(){
+  for(const e of shotEffects){
+    ctx.strokeStyle=e.side==="EMBER"?"rgba(255,125,105,.85)":"rgba(110,185,255,.85)";
+    ctx.lineWidth=e.defense?1:1.5;
+    ctx.beginPath();ctx.moveTo(e.x1,e.y1);ctx.lineTo(e.x2,e.y2);ctx.stroke();
+    ctx.fillStyle="#f5e6b0";ctx.fillRect(e.x2-2,e.y2-2,4,4);
+    if(e.splash){
+      ctx.strokeStyle="#f5e6b0";ctx.globalAlpha=.55;ctx.lineWidth=1;
+      ctx.beginPath();ctx.arc(e.x2,e.y2,30,0,Math.PI*2);ctx.stroke();ctx.globalAlpha=1;
+    }
+  }
+}
+function drawUnits(){
+  for(const u of units){
+    const c=FACTION_COLORS[u.side],size=u.role==="LINE"?4:(u.role==="SCOUT"?3:5);
+    ctx.fillStyle=c;ctx.fillRect(Math.round(u.x-size/2),Math.round(u.y-size/2),size,size);
+    if(u.role==="SUPPORT"){ctx.strokeStyle=c;ctx.strokeRect(Math.round(u.x-4),Math.round(u.y-4),8,8)}
+    if(u.garrisonNode){
+      ctx.strokeStyle="#e7e8ec";ctx.globalAlpha=.55;ctx.lineWidth=1;
+      ctx.strokeRect(Math.round(u.x-4),Math.round(u.y-4),8,8);ctx.globalAlpha=1;
+    }
+    if(u.hp/u.maxHp<.45){ctx.fillStyle="#0a0b0d";ctx.fillRect(u.x-4,u.y-7,8,2);ctx.fillStyle=c;ctx.fillRect(u.x-4,u.y-7,8*u.hp/u.maxHp,2)}
+  }
+}
+
+function drawLabels(){
+  ctx.fillStyle="#848a96";ctx.font="9px ui-monospace,monospace";ctx.textAlign="left";
+  for(const side of ["EMBER","AZURE"]){
+    const f=factions[side],label=side==="EMBER"?"エンバー拠点":"アズール拠点";
+    ctx.textAlign=f.base.x<W/2?"left":"right";
+    ctx.fillText(label,f.base.x+(f.base.x<W/2?-42:42),H/2-30);
+  }
+  ctx.textAlign="left";
+}
+
+function render(){
+  ctx.imageSmoothingEnabled=false;
+  drawGrid();
+  if(!factions.EMBER||!factions.AZURE)return;
+  drawInfluence();drawBases();drawNodes();drawShotEffects();drawUnits();drawLabels();
+}
+
+function traitHtml(f){
+  const arr=[["AGGRESSION",f.aggression],["CAUTION",f.caution],["COORDINATION",f.coordination],["LOGISTICS",f.logistics],["ADAPTABILITY",f.adaptability]];
+  return arr.map(([n,v])=>'<div class="trait"><span>'+n+'</span><div class="bar"><i style="width:'+Math.round(v*100)+'%"></i></div><b>'+Math.round(v*100)+'</b></div>').join("");
+}
+
+function updateUI(){
+  const sec=Math.floor(simTime),mm=String(Math.floor(sec/60)).padStart(2,"0"),ss=String(sec%60).padStart(2,"0");
+  timeText.textContent=mm+":"+ss;
+  const eOwned=ownedNodes("EMBER"),aOwned=ownedNodes("AZURE"),neutral=nodes.length-eOwned-aOwned;
+  const ePct=Math.round((eOwned+neutral*.5)/nodes.length*100),aPct=100-ePct;
+  controlText.textContent=ePct+" / "+aPct;
+  unitsText.textContent=living("EMBER").length+" / "+living("AZURE").length;
+  for(const side of ["EMBER","AZURE"]){
+    const f=factions[side];
+    (side==="EMBER"?emberDoctrine:azureDoctrine).textContent=DOCTRINE_JA[f.doctrine];
+    (side==="EMBER"?emberThought:azureThought).textContent=f.thought;
+    (side==="EMBER"?emberMemory:azureMemory).textContent=f.memory+" · 補給 "+f.supply.toFixed(0)+" · 撃破/損失 "+f.kills+"/"+f.losses+" · 拠点 "+nodeAbilitySummary(side)+" · 建設 "+(f.builtNodeType?NODE_TYPES[f.builtNodeType].label:"検討中")+" · 要塞 "+(f.emergencyDefenseBuilt?"建設済み":"未建設")+" · 守備隊 "+garrisonCount(side);
+  }
+}
+
+function cycleSpeed(){
+  timeScale=timeScale===1?2:(timeScale===2?4:1);
+  speedButton.querySelector("strong").textContent="速度 ×"+timeScale;
+}
+
+newWarButton.addEventListener("click",reset);
+speedButton.addEventListener("click",cycleSpeed);
+
+function resize(){
+  const r=canvas.getBoundingClientRect(),w=Math.max(320,Math.round(r.width||960)),h=Math.round(w*600/960);
+  canvas.width=w;canvas.height=h;
+}
+window.addEventListener("resize",resize);resize();
+
+function loop(t){
+  const raw=Math.min(.05,Math.max(0,(t-last)/1000||.016));last=t;
+  if(running){
+    const steps=timeScale*2,dt=raw*timeScale/steps;
+    for(let i=0;i<steps;i++)update(dt);
+    updateUI();
+  }
+  const sx=canvas.width/W,sy=canvas.height/H;
+  ctx.save();ctx.scale(sx,sy);render();ctx.restore();
+  requestAnimationFrame(loop);
+}
+// Start immediately: no static pre-start state.
+reset();
+requestAnimationFrame(loop);
+})();
