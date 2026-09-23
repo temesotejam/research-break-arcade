@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0b0c10">
   <meta name="description" content="2つの勢力が簡易AIで争い、戦況に応じて方針を変えるドット描画シミュレーション。">
   <title>Research Break Arcade — 二勢力シミュレーション</title>
-  <link rel="stylesheet" href="factions-v3.css">
+  <link rel="stylesheet" href="factions-v4.css">
 </head>
 <body>
 <main class="app">
@@ -36,7 +36,6 @@
     <div class="stage-wrap">
       <canvas id="simCanvas" width="960" height="600" aria-label="2勢力の自律戦闘シミュレーション"></canvas>
       <div class="legend"><span class="dot ember"></span>EMBER（エンバー） <span class="dot azure"></span>AZURE（アズール） <span class="node-dot"></span>支配拠点</div>
-      <div id="placementHint" class="placement-hint" hidden></div>
     </div>
 
     <div class="faction-grid">
@@ -79,14 +78,13 @@
         </div>
         <span class="mini-label" style="margin-top:9px">拠点能力</span>
         <div class="doctrine-list">
-          <span>補：補給収入+</span><span>医：周囲回復</span><span>指：周囲戦闘力+</span><span>生：増援高速化</span>
+          <span>補：補給収入+</span><span>医：周囲回復</span><span>指：周囲戦闘力+</span><span>生：増援高速化</span><span>白枠：AIが建設した追加拠点</span>
         </div>
       </section>
     </div>
 
     <div class="actions">
       <button id="newWarButton" type="button"><strong>新しい戦局</strong><span>性格・配置をすべて作り直す</span></button>
-      <button id="placeNodeButton" type="button"><strong>自由拠点を配置</strong><span>今回の能力：—</span></button>
       <button id="speedButton" type="button"><strong>速度 ×1</strong><span>×1 → ×2 → ×4</span></button>
     </div>
   </section>
@@ -96,6 +94,6 @@
     <span>Canvas 2D / 外部ライブラリなし</span>
   </footer>
 </main>
-<script src="factions-v8.js"></script>
+<script src="factions-v9.js"></script>
 </body>
 </html>
