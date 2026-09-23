@@ -335,14 +335,14 @@ function step(){
 }
 function circleEvent(cx0,cy0,r,fn){var x,y,dx,dy,j;for(y=cy0-r;y<=cy0+r;y++)for(x=cx0-r;x<=cx0+r;x++){dx=x-cx0;dy=y-cy0;if(dx*dx+dy*dy<=r*r){j=id(x,y);if(type[j]!==5)fn(j)}}}
 function worldEvent(){
-  var k=(Math.random()*7)|0,cx0=(Math.random()*W)|0,cy0=(Math.random()*H)|0,r=(rnd(10,4))|0;
+  var k=(Math.random()*8)|0,cx0=(Math.random()*W)|0,cy0=(Math.random()*H)|0,r=(rnd(10,4))|0;
   if(k===0){circleEvent(cx0,cy0,r,function(j){nutrient[j]=clamp(nutrient[j]+rnd(.6,.25),0,1.4)});addLog('局地的な豪雨。栄養が流入し緑化が始まる。')}
   else if(k===1){circleEvent(cx0,cy0,r,function(j){if(type[j]===1&&Math.random()<.48){type[j]=0;energy[j]=0}nutrient[j]*=.82});addLog('乾燥域が発生。植物帯に大きな空白。')}
   else if(k===2){circleEvent(cx0,cy0,r,function(j){if(type[j]===1&&Math.random()<.45){type[j]=4;energy[j]=.5}else if((type[j]===2||type[j]===3)&&Math.random()<.25){type[j]=4;energy[j]=.55}});addLog('病原体の波。密集地で大量死と分解が進む。')}
   else if(k===3){circleEvent(cx0,cy0,r,function(j){if(type[j]>0&&type[j]<5){gene[j]=mutate(gene[j],.8);adapt[j]=mutate(adapt[j],.7);armor[j]=mutate(armor[j],.6)}});addLog('放射線嵐。代謝・環境適応・防御に大きな突然変異。')}
   else if(k===4){circleEvent(cx0,cy0,3,function(j){type[j]=5;energy[j]=0;age[j]=0;lineage[j]=0;nutrient[j]=Math.max(.08,nutrient[j]*.7)});circleEvent(cx0,cy0,r,function(j){nutrient[j]=clamp(nutrient[j]+.15,0,1.4)});addLog('小天体が衝突。新しい岩盤と栄養リングが形成。')}
   else if(k===5){circleEvent(cx0,cy0,r,function(j){if(type[j]===0&&Math.random()<.34){type[j]=1;energy[j]=.6;gene[j]=(rnd(230,30))|0;adapt[j]=clamp(tempAt(j)+rnd(38,-38),20,235);armor[j]=(rnd(145,60))|0;lineage[j]=1;registerLineage(1,1,0)}});addLog('休眠種子が一斉発芽。新しい植物系統が拡大。')}
-  else{circleEvent(cx0,cy0,r,function(j){if(type[j]===2&&Math.random()<.4){type[j]=3;energy[j]=.72;lineage[j]=3;registerLineage(3,3,0)}else if(type[j]===3&&Math.random()<.28){type[j]=2;energy[j]=.68;lineage[j]=2;registerLineage(2,2,0)}});addLog('食物網が再編。捕食・被食の境界が反転。')}
+  else if(k===6){circleEvent(cx0,cy0,r,function(j){if(type[j]===2&&Math.random()<.4){type[j]=3;energy[j]=.72;lineage[j]=3;registerLineage(3,3,0)}else if(type[j]===3&&Math.random()<.28){type[j]=2;energy[j]=.68;lineage[j]=2;registerLineage(2,2,0)}});addLog('食物網が再編。捕食・被食の境界が反転。')}\n  else{circleEvent(cx0,cy0,Math.max(2,(r*.55)|0),function(j){if(Math.random()<.58){type[j]=5;energy[j]=0;age[j]=0;lineage[j]=0}else nutrient[j]=clamp(nutrient[j]+.25,0,1.4)});addLog('地殻変動。新しい岩盤が隆起し、周囲に鉱物栄養が供給された。')}
 }
 function counts(){
   var a=[0,0,0,0,0,0],gs=[0,0,0,0,0,0],gc=[0,0,0,0,0,0],i;
