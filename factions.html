@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0b0c10">
   <meta name="description" content="2つの勢力が簡易AIで争い、戦況に応じて方針を変えるドット描画シミュレーション。">
   <title>Research Break Arcade — 二勢力シミュレーション</title>
-  <link rel="stylesheet" href="factions-v2.css">
+  <link rel="stylesheet" href="factions-v3.css">
 </head>
 <body>
 <main class="app">
@@ -36,6 +36,7 @@
     <div class="stage-wrap">
       <canvas id="simCanvas" width="960" height="600" aria-label="2勢力の自律戦闘シミュレーション"></canvas>
       <div class="legend"><span class="dot ember"></span>EMBER（エンバー） <span class="dot azure"></span>AZURE（アズール） <span class="node-dot"></span>支配拠点</div>
+      <div id="placementHint" class="placement-hint" hidden></div>
     </div>
 
     <div class="faction-grid">
@@ -85,6 +86,7 @@
 
     <div class="actions">
       <button id="newWarButton" type="button"><strong>新しい戦局</strong><span>性格・配置をすべて作り直す</span></button>
+      <button id="placeNodeButton" type="button"><strong>自由拠点を配置</strong><span>今回の能力：—</span></button>
       <button id="speedButton" type="button"><strong>速度 ×1</strong><span>×1 → ×2 → ×4</span></button>
     </div>
   </section>
@@ -94,6 +96,6 @@
     <span>Canvas 2D / 外部ライブラリなし</span>
   </footer>
 </main>
-<script src="factions-v7.js"></script>
+<script src="factions-v8.js"></script>
 </body>
 </html>
