@@ -263,6 +263,7 @@ function step(){
   gen++;seasonTick++;eventTick++;
   if(seasonTick>=430){seasonTick=0;seasonIndex=(seasonIndex+1)%4;addLog('季節が '+seasons[seasonIndex].n+' へ。'+seasons[seasonIndex].text)}
   if(eventTick>=rnd(520,300)){eventTick=0;worldEvent()}
+  if(gen%40===0)rescue();
   if(gen%10===0)recordHistory();
 }
 function circleEvent(cx0,cy0,r,fn){var x,y,dx,dy,j;for(y=cy0-r;y<=cy0+r;y++)for(x=cx0-r;x<=cx0+r;x++){dx=x-cx0;dy=y-cy0;if(dx*dx+dy*dy<=r*r){j=id(x,y);if(type[j]!==5)fn(j)}}}
