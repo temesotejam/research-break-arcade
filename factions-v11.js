@@ -270,7 +270,7 @@ function nodeStrategicValue(side,n){
   if(n.type==="MEDIC")v+=.45+f.caution*.50+m.hurt*.95;
   if(n.type==="COMMAND")v+=.50+f.aggression*.45+f.coordination*.50+(f.doctrine==="ATTACK"?.35:0);
   if(n.type==="FACTORY")v+=.55+f.logistics*.45+(m.armyRatio<.9?.75:0);
-  if(n.type==="ARTILLERY")v+=.60+f.aggression*.55+f.adaptability*.30+((f.doctrine==="ATTACK"||f.doctrine==="RAID")?.45:0);
+  if(n.type==="ARTILLERY")v+=.60+f.aggression*.55+f.adaptability*.30+((f.doctrine==="ATTACK"||f.doctrine==="RAID") ? .45 : 0);
   if(n.owner===enemySide(side))v+=.22;
   return v;
 }
