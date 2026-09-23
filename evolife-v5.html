@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#071118">
+<title>EvoLife — Living Cellular Automata</title>
+<style>
+*{box-sizing:border-box}body{margin:0;padding:14px;background:#071118;color:#eaf7fb;font-family:system-ui,-apple-system,sans-serif}
+.app{max-width:1240px;margin:auto}.top{display:flex;justify-content:space-between;gap:14px;align-items:end;flex-wrap:wrap;margin-bottom:12px}
+.k{font-size:11px;letter-spacing:.16em;color:#69d4ec;font-weight:850}.top h1{font-size:clamp(28px,4vw,46px);margin:3px 0}
+.desc{max-width:780px;color:#92adba;line-height:1.5;margin:0;font-size:14px}.ctrl{display:flex;gap:7px;flex-wrap:wrap}
+button{border:1px solid #294858;background:#0c1d27;color:#eaf7fb;border-radius:9px;padding:10px 12px;min-height:42px;font-weight:780;cursor:pointer}
+button.on{background:#153d4e;border-color:#6bd9ef}.layout{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:12px}
+.card{border:1px solid #1d3745;background:#091822;border-radius:14px;overflow:hidden}.head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid #1b3442}
+.badges{display:flex;gap:7px;flex-wrap:wrap}.b{border:1px solid #294858;background:#102633;border-radius:999px;padding:5px 8px;font-size:11px;color:#c9eaf3}
+.world{position:relative;background:#051015}.world canvas{width:100%;height:auto;display:block;image-rendering:pixelated;aspect-ratio:5/3}
+.legend{display:flex;gap:14px;flex-wrap:wrap;padding:9px 12px;border-top:1px solid #1b3442;color:#7899a9;font-size:11px}
+.legend span{display:flex;align-items:center;gap:5px}.sw{width:9px;height:9px;border-radius:2px;display:inline-block}
+.sec{padding:12px;border-bottom:1px solid #19313e}.sec h2{font-size:11px;letter-spacing:.12em;color:#bcd7e0;margin:0 0 8px}
+.phase{font-size:21px;font-weight:850;margin-bottom:4px}.muted{font-size:12px;color:#7797a7;line-height:1.45}
+.stat{display:grid;grid-template-columns:12px 1fr auto;gap:8px;align-items:center;padding:5px 0;font-size:12px}.dot{width:9px;height:9px;border-radius:2px}
+.bar{height:4px;background:#122934;border-radius:8px;overflow:hidden;margin-top:3px}.bar i{display:block;height:100%}
+.chart{width:100%;height:110px;display:block;background:#07131a;border-radius:8px}
+.feed{padding:5px 12px 12px;max-height:270px;overflow:auto}.ev{padding:7px 0;border-bottom:1px solid #142a35;font-size:12px;line-height:1.35}.ev small{display:block;color:#527483}
+.note{font-size:11px;color:#5f8292;padding:10px 12px;line-height:1.45}
+@media(max-width:920px){.layout{grid-template-columns:1fr}.feed{max-height:210px}}@media(max-width:560px){body{padding:8px}.desc{font-size:13px}.ctrl{width:100%}.ctrl button{flex:1}}
+</style>
+</head>
+<body>
+<main class="app">
+  <div class="top">
+    <div>
+      <div class="k">RESEARCH BREAK ARCADE / CELLULAR ECOSYSTEM</div>
+      <h1>EvoLife</h1>
+      <p class="desc">ライフゲームを生態系へ発展。各セルは周囲8マス・土壌・気候だけを見て生きます。代謝・気候適応・防御が遺伝し、突然変異から新系統が分岐。北と南、季節、捕食圧によって優勢な系統が自然に入れ替わります。さらに土壌水分と火災が加わり、雨→繁茂→乾燥→火災→灰による再生という長い循環も起こります。</p>
+    </div>
+    <div class="ctrl">
+      <button id="pause">PAUSE</button>
+      <button class="sp on" data-s="1">1×</button>
+      <button class="sp" data-s="3">3×</button>
+      <button class="sp" data-s="8">8×</button>
+      <button id="new">NEW ECOSYSTEM</button>
+    </div>
+  </div>
+
+  <div class="layout">
+    <section class="card">
+      <div class="head">
+        <div class="badges">
+          <span class="b" id="gen">GEN 0</span>
+          <span class="b" id="season">SPRING</span>
+          <span class="b" id="diversity">DIVERSITY --</span>\n          <span class="b">BUILD V5</span>\n          <span class="b" id="fireBadge">FIRE 0</span>
+        </div>
+        <span class="b" id="headline">生態系を生成中…</span>
+      </div>
+      <div class="world"><canvas id="world" width="120" height="72" aria-label="進化するセルオートマトン"></canvas></div>
+      <div class="legend">
+        <span><i class="sw" style="background:#65d96d"></i>植物</span>
+        <span><i class="sw" style="background:#f0c85b"></i>草食</span>
+        <span><i class="sw" style="background:#f07171"></i>捕食</span>
+        <span><i class="sw" style="background:#b08ad9"></i>分解者</span>
+        <span><i class="sw" style="background:#54727d"></i>岩盤→風化→土壌</span>\n        <span><i class="sw" style="background:#ff7a3d"></i>火災</span>
+        <span>明るいほど活力 / 栄養が高い</span>
+      </div>
+    </section>
+
+    <aside class="card">
+      <div class="sec">
+        <h2>ECOSYSTEM STATE</h2>
+        <div class="phase" id="phase">形成期</div>
+        <div class="muted" id="phaseText">植物が地形と栄養に沿って広がり始めています。</div>
+      </div>
+      <div class="sec">
+        <h2>POPULATION</h2>
+        <div id="stats"></div>
+      </div>
+      <div class="sec">
+        <h2>DOMINANT LINEAGES</h2>
+        <div id="lineages"></div>
+      </div>
+      <div class="sec">
+        <h2>LAST 240 GENERATIONS</h2>
+        <canvas id="chart" class="chart" width="300" height="110"></canvas>
+      </div>
+      <div class="sec"><h2>CHRONICLE</h2></div>
+      <div class="feed" id="feed"></div>
+      <div class="note">繁殖時には代謝・環境適応・防御の3形質が独立に変異し、まれに新しい系統へ分岐します。寒冷適応・防御・攻撃性には実際のトレードオフがあり、優勢な系統は右側で追跡できます。栄養の高い空地には休眠種子、植物帯には草食の休眠卵、草食帯には捕食者の休眠卵が残ります。土壌水分も各セルに保持され、雨・蒸発・植物消費で変化します。乾いた植物群落では火災が局所的に伝播し、灰が次の世代の栄養になります。岩盤も永久壁ではなく、雨・植物・分解者の影響でゆっくり風化し、最後は栄養の多い土壌へ戻ります。</div>
+    </aside>
+  </div>
+</main>
+
+<script>
+(function(){
+'use strict';
+var W=120,H=72,N=W*H, canvas=document.getElementById('world'),ctx=canvas.getContext('2d',{alpha:false});
+var chart=document.getElementById('chart'),cx=chart.getContext('2d');
+var type,energy,age,gene,adapt,armor,lineage,nutrient,moisture,nextType,nextEnergy,nextAge,nextGene,nextAdapt,nextArmor,nextLineage,nextNut,nextMoisture,gen=0,speed=1,paused=false,last=performance.now(),acc=0,stepRate=13;
+var seasonIndex=0,seasonTick=0,eventTick=0,history=[],logs=[],mutationCount=0,nextLineageId=10,lineageMeta={};
+var names=['EMPTY','PLANT','GRAZER','PREDATOR','DECOMPOSER','ROCK','FIRE'];
+var colors=[[6,17,22],[71,205,91],[235,186,67],[234,88,91],[159,112,201],[67,94,104],[255,112,48]];
+var seasons=[
+  {n:'SPRING',plant:1.45,graze:1.0,decay:1.0,text:'植物の繁殖が加速。食物網の土台が広がる。'},
+  {n:'SUMMER',plant:1.0,graze:1.22,decay:.9,text:'草食の増殖が強まり、植物群落へ圧力がかかる。'},
+  {n:'AUTUMN',plant:.78,graze:1.0,decay:1.45,text:'分解が加速し、死骸が次世代の栄養へ戻る。'},
+  {n:'WINTER',plant:.62,graze:.72,decay:.8,text:'成長が鈍化。蓄えの少ない系統が淘汰される。'}
+];
+function rnd(a,b){return (b===undefined?0:b)+Math.random()*(a-(b===undefined?0:b))}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+function id(x,y){x=(x+W)%W;y=(y+H)%H;return y*W+x}
+function countAround(i,t){
+  var x=i%W,y=(i/W)|0,c=0,dx,dy;
+  for(dy=-1;dy<=1;dy++)for(dx=-1;dx<=1;dx++)if(dx||dy)c+=type[id(x+dx,y+dy)]===t;
+  return c;
+}
+function avgNut(i){
+  var x=i%W,y=(i/W)|0,s=0,dx,dy;
+  for(dy=-1;dy<=1;dy++)for(dx=-1;dx<=1;dx++)s+=nutrient[id(x+dx,y+dy)];
+  return s/9;
+}
+function neighborGene(i,t){
+  var x=i%W,y=(i/W)|0,a=[],dx,dy,j;
+  for(dy=-1;dy<=1;dy++)for(dx=-1;dx<=1;dx++)if(dx||dy){j=id(x+dx,y+dy);if(type[j]===t)a.push(gene[j])}
+  return a.length?a[(Math.random()*a.length)|0]:128;
+}
+function mutate(g,rate){
+  var major=Math.random()<rate;
+  if(major){g+=Math.round(rnd(64,-64));mutationCount++}
+  else g+=Math.round(rnd(5,-5));
+  return clamp(g,20,235);
+}
+function phenotype(t,g){
+  if(t===1)return g<90?'耐久型':g>170?'高速成長型':'均衡型';
+  if(t===2)return g<90?'省エネ型':g>170?'大食型':'均衡型';
+  if(t===3)return g<90?'持久型':g>170?'強襲型':'均衡型';
+  if(t===4)return g<90?'長寿型':g>170?'高速分解型':'均衡型';
+  return '';
+}
+function tempAt(i){
+  var y=(i/W)|0;
+  var base=220-(y/(H-1))*180;
+  var shift=seasonIndex===1?24:seasonIndex===3?-30:seasonIndex===0?-4:7;
+  return clamp(base+shift,15,240);
+}
+function climateFitness(i,a){
+  return clamp(1-Math.abs(a-tempAt(i))/210,.28,1);
+}
+function neighborIndex(i,t){
+  var x=i%W,y=(i/W)|0,a=[],dx,dy,j;
+  for(dy=-1;dy<=1;dy++)for(dx=-1;dx<=1;dx++)if(dx||dy){j=id(x+dx,y+dy);if(type[j]===t)a.push(j)}
+  return a.length?a[(Math.random()*a.length)|0]:-1;
+}
+function baseLineageFor(t){return t>0&&t<5?t:0}
+function registerLineage(l,t,parent){
+  if(!lineageMeta[l])lineageMeta[l]={type:t,parent:parent||0,born:gen};
+}
+function inheritGenome(i,t,rate){
+  var p=neighborIndex(i,t),l=baseLineageFor(t),g0=128,a0=tempAt(i),r0=96;
+  if(p>=0){l=lineage[p]||l;g0=gene[p];a0=adapt[p];r0=armor[p]}
+  var split=Math.random()<rate*.10;
+  nextGene[i]=mutate(g0,rate);
+  nextAdapt[i]=mutate(a0,rate*.72);
+  nextArmor[i]=mutate(r0,rate*.58);
+  if(split){
+    var parent=l;
+    l=nextLineageId++;
+    registerLineage(l,t,parent);
+    if(Math.random()<.35)addLog(names[t]+' に新系統 L'+l+' が分岐。');
+  }
+  nextLineage[i]=l;
+}
+function lineageColorShift(l){return ((l*47)%61)-30}
+function lineageCss(l,t){
+  var q=lineageColorShift(l),b=colors[t];
+  return 'rgb('+clamp(b[0]+q,0,255)+','+clamp(b[1]+q*.35,0,255)+','+clamp(b[2]-q*.25,0,255)+')';
+}
+function init(){
+  type=new Uint8Array(N);energy=new Float32Array(N);age=new Uint16Array(N);gene=new Uint8Array(N);adapt=new Uint8Array(N);armor=new Uint8Array(N);lineage=new Uint16Array(N);nutrient=new Float32Array(N);moisture=new Float32Array(N);
+  nextType=new Uint8Array(N);nextEnergy=new Float32Array(N);nextAge=new Uint16Array(N);nextGene=new Uint8Array(N);nextAdapt=new Uint8Array(N);nextArmor=new Uint8Array(N);nextLineage=new Uint16Array(N);nextNut=new Float32Array(N);nextMoisture=new Float32Array(N);
+  gen=0;seasonIndex=0;seasonTick=0;eventTick=0;history=[];logs=[];mutationCount=0;nextLineageId=10;lineageMeta={};
+  var i,x,y,n;
+  for(i=0;i<N;i++){
+    x=i%W;y=(i/W)|0;
+    n=.35+.35*Math.sin(x*.095)+.18*Math.sin(y*.17+x*.035)+rnd(.22,-.08);
+    nutrient[i]=clamp(n,.05,1);\n    moisture[i]=clamp(.52+.22*Math.sin(y*.11)-.12*Math.sin(x*.07)+rnd(.18,-.12),.08,1);
+    gene[i]=(rnd(171,85))|0;
+    adapt[i]=clamp(tempAt(i)+Math.round(rnd(50,-50)),20,235);
+    armor[i]=(rnd(145,65))|0;
+    if(Math.random()<.055 || ((x-28)*(x-28)+(y-36)*(y-36)<62&&Math.random()<.45)){type[i]=5;energy[i]=0}
+    else if(Math.random()<.37){type[i]=1;energy[i]=rnd(.95,.45);lineage[i]=1;registerLineage(1,1,0)}
+    else type[i]=0;
+  }
+  for(i=0;i<70;i++){var p=(Math.random()*N)|0;if(type[p]!==5){type[p]=2;energy[p]=rnd(.95,.65);lineage[p]=2;registerLineage(2,2,0)}}
+  for(i=0;i<24;i++){var q=(Math.random()*N)|0;if(type[q]!==5){type[q]=3;energy[q]=rnd(.95,.7);lineage[q]=3;registerLineage(3,3,0)}}
+  for(i=0;i<34;i++){var r=(Math.random()*N)|0;if(type[r]!==5){type[r]=4;energy[r]=rnd(.8,.45);lineage[r]=4;registerLineage(4,4,0)}}
+  addLog('新しい生態系が誕生。局所ルールだけで進化を開始。');
+  document.getElementById('pause').textContent='PAUSE';paused=false;updateUI();draw();
+}
+function addLog(s){logs.unshift({g:gen,s:s});logs=logs.slice(0,22);document.getElementById('headline').textContent=s.length>37?s.slice(0,36)+'…':s}
+function dieToDecomposer(i,chance){
+  if(Math.random()<chance){nextType[i]=4;nextEnergy[i]=.52;inheritGenome(i,4,.025);nextAge[i]=0}
+  else{nextType[i]=0;nextEnergy[i]=0;nextAge[i]=0;nextLineage[i]=0;nextNut[i]=clamp(nextNut[i]+.15,0,1.4)}
+}
+function rescue(){
+  var c=counts();
+  function seed(t,want){
+    var made=0,tries=0,j,near;
+    while(made<want&&tries<2500){
+      tries++;j=(Math.random()*N)|0;
+      if(type[j]!==0)continue;
+      if(t===1){
+        if(nutrient[j]<.24)continue;
+        type[j]=1;energy[j]=.52;gene[j]=(rnd(190,80))|0;adapt[j]=clamp(tempAt(j)+rnd(28,-28),20,235);armor[j]=(rnd(135,70))|0;lineage[j]=1;registerLineage(1,1,0);age[j]=0;made++;
+      }else if(t===2){
+        if(countAround(j,1)<3)continue;
+        type[j]=2;energy[j]=.68;gene[j]=(rnd(190,80))|0;adapt[j]=clamp(tempAt(j)+rnd(35,-35),20,235);armor[j]=(rnd(145,65))|0;lineage[j]=2;registerLineage(2,2,0);age[j]=0;made++;
+      }else if(t===3){
+        if(countAround(j,2)<2)continue;
+        type[j]=3;energy[j]=.72;gene[j]=(rnd(190,80))|0;adapt[j]=clamp(tempAt(j)+rnd(42,-42),20,235);armor[j]=(rnd(125,55))|0;lineage[j]=3;registerLineage(3,3,0);age[j]=0;made++;
+      }else if(t===4){
+        near=countAround(j,1)+countAround(j,2)+countAround(j,3);
+        if(near<2)continue;
+        type[j]=4;energy[j]=.56;gene[j]=(rnd(190,80))|0;adapt[j]=clamp(tempAt(j)+rnd(45,-45),20,235);armor[j]=(rnd(115,55))|0;lineage[j]=4;registerLineage(4,4,0);age[j]=0;made++;
+      }
+    }
+  }
+  if(c.a[1]<80)seed(1,Math.min(60,80-c.a[1]));
+  if(c.a[2]<16&&c.a[1]>350)seed(2,Math.min(12,16-c.a[2]));
+  if(c.a[3]<8&&c.a[2]>120)seed(3,Math.min(6,8-c.a[3]));
+  if(c.a[4]<12&&c.a[1]+c.a[2]+c.a[3]>250)seed(4,Math.min(8,12-c.a[4]));
+}
+function step(){
+  var s=seasons[seasonIndex],i,t,p,g,h,d,ng,e,a,localN;
+  for(i=0;i<N;i++){
+    t=type[i];p=countAround(i,1);g=countAround(i,2);h=countAround(i,3);d=countAround(i,4);localN=avgNut(i);
+    nextType[i]=t;nextEnergy[i]=energy[i];nextAge[i]=age[i]+1;nextGene[i]=gene[i];nextAdapt[i]=adapt[i];nextArmor[i]=armor[i];nextLineage[i]=lineage[i];
+    nextNut[i]=clamp(nutrient[i]*.965+localN*.035,0,1.4);
+    var seasonWet=seasonIndex===0?.006:seasonIndex===1?-.008:seasonIndex===2?.001:seasonIndex===3?-.004:0;
+    var evap=(tempAt(i)/240)*.006;
+    nextMoisture[i]=clamp(moisture[i]+seasonWet-evap+(d*.0008),0,1.15);
+    if(t===6){
+      nextEnergy[i]=energy[i]-.16;
+      nextMoisture[i]=Math.max(0,nextMoisture[i]-.11);
+      nextNut[i]=clamp(nextNut[i]+.025,0,1.4);
+      if(energy[i]<=.18||age[i]>12){
+        nextType[i]=0;nextEnergy[i]=0;nextAge[i]=0;nextLineage[i]=0;
+        nextNut[i]=clamp(nextNut[i]+.18,0,1.4);
+      }
+      continue;
+    }
+    if(t===5){
+      var wet=seasonIndex===0?1.45:seasonIndex===2?1.2:seasonIndex===3?.72:1.0;
+      var weather=(.00018 + p*.00016 + d*.00034 + localN*.00008)*wet;
+      nextEnergy[i]=clamp(energy[i]+weather,0,1.15);
+      nextNut[i]=clamp(nextNut[i]+d*.00045+p*.00018,0,1.4);
+      if(nextEnergy[i]>=1 || (age[i]>5200 && Math.random()<.0025)){
+        nextType[i]=0;
+        nextEnergy[i]=0;
+        nextAge[i]=0;
+        nextGene[i]=128;nextAdapt[i]=128;nextArmor[i]=96;nextLineage[i]=0;
+        nextNut[i]=clamp(nextNut[i]+.55,0,1.4);
+        if(Math.random()<.028)addLog('風化した岩盤が崩れ、栄養の多い新しい土壌が生まれた。');
+      }
+      continue;
+    }
+
+    if(t===0){
+      nextEnergy[i]=0;nextAge[i]=0;
+      if(p>=5 && g===0 && Math.random()<.0015*s.graze){
+        nextType[i]=2;nextEnergy[i]=.62;inheritGenome(i,2,.08);nextAge[i]=0;
+      }else if(g>=3 && h===0 && Math.random()<.0010){
+        nextType[i]=3;nextEnergy[i]=.66;inheritGenome(i,3,.08);nextAge[i]=0;
+      }else if(p>0 && p<7 && nutrient[i]>.11 && Math.random()<(p*.024+.018)*s.plant*(.45+.65*nutrient[i])){
+        nextType[i]=1;nextEnergy[i]=.48;inheritGenome(i,1,.012);nextNut[i]=Math.max(0,nextNut[i]-.035);
+      }else if(p===0 && nutrient[i]>.25 && Math.random()<.0008*s.plant*nutrient[i]){
+        nextType[i]=1;nextEnergy[i]=.44;nextGene[i]=mutate(128,.12);nextAdapt[i]=mutate(tempAt(i),.08);nextArmor[i]=mutate(96,.06);nextLineage[i]=1;registerLineage(1,1,0);nextNut[i]=Math.max(0,nextNut[i]-.025);
+      }else if(d>0 && (p+g+h)>1 && Math.random()<d*.005*s.decay){
+        nextType[i]=4;nextEnergy[i]=.42;inheritGenome(i,4,.01);
+      }
+      continue;
+    }
+
+    if(t===1){
+      var cf=climateFitness(i,adapt[i]);
+      var waterFit=clamp(.35+moisture[i]*.95,.28,1.25);
+      e=energy[i]+(.020+.000115*gene[i])*s.plant*(.35+.65*nutrient[i])*cf*waterFit-(.006+.000025*gene[i]+armor[i]*.000018);
+      nextMoisture[i]=Math.max(0,nextMoisture[i]-(.0018+.000006*gene[i]));
+      nextNut[i]=Math.max(0,nextNut[i]-(.004+.000027*gene[i]));
+      var gj=neighborIndex(i,2),grazerGene=gj>=0?gene[gj]:128;
+      var eatPlant=(.012+.000072*grazerGene)*(1-armor[i]/430)*s.graze;
+      var flame=countAround(i,6);
+      var burnChance=flame*(.018+.085*(1-moisture[i]))*(1-armor[i]/520);
+      if(flame>0&&Math.random()<burnChance){
+        nextType[i]=6;nextEnergy[i]=.9;nextAge[i]=0;nextLineage[i]=0;
+      }else if(g>0 && Math.random()<g*eatPlant){
+        nextType[i]=2;nextEnergy[i]=clamp(.48+energy[i]*.24,0,1.2);inheritGenome(i,2,.018);nextAge[i]=0;
+      }else if((p>=7 && Math.random()<.16)||e<=.04||age[i]>(1550-gene[i]*3)){
+        dieToDecomposer(i,.30+.05*d);
+      }else nextEnergy[i]=clamp(e,0,1.25);
+      continue;
+    }
+
+    if(t===2){
+      if(countAround(i,6)>0&&moisture[i]<.24&&Math.random()<.025){nextType[i]=6;nextEnergy[i]=.72;nextAge[i]=0;nextLineage[i]=0;continue;}
+      var cf2=climateFitness(i,adapt[i]);
+      e=energy[i]-(.008+.00005*gene[i]+armor[i]*.000022+(1-cf2)*.018);
+      if(p>0)e+=(.020+.00011*gene[i])*Math.min(4,p);
+      var pj=neighborIndex(i,3),predatorGene=pj>=0?gene[pj]:128;
+      var eatGrazer=(.010+.000072*predatorGene)*(1-armor[i]/440);
+      if(h>0 && Math.random()<h*eatGrazer){
+        nextType[i]=3;nextEnergy[i]=clamp(.5+energy[i]*.22,0,1.2);inheritGenome(i,3,.018);nextAge[i]=0;
+      }else if(e<.05 || (p===0&&age[i]>48+gene[i]*.45)){
+        dieToDecomposer(i,.48);
+      }else if(g>5&&p<2&&Math.random()<.045){
+        dieToDecomposer(i,.3);
+      }else nextEnergy[i]=clamp(e,0,1.25);
+      continue;
+    }
+
+    if(t===3){
+      if(countAround(i,6)>0&&moisture[i]<.20&&Math.random()<.018){nextType[i]=6;nextEnergy[i]=.72;nextAge[i]=0;nextLineage[i]=0;continue;}
+      var cf3=climateFitness(i,adapt[i]);
+      e=energy[i]-(.009+.000062*gene[i]+armor[i]*.000017+(1-cf3)*.020);
+      if(g>0)e+=(.026+.00013*gene[i])*Math.min(4,g);
+      if(e<.045 || (g===0&&age[i]>42+gene[i]*.42)){
+        dieToDecomposer(i,.62);
+      }else if(h>5&&g<2&&Math.random()<.045){
+        dieToDecomposer(i,.5);
+      }else nextEnergy[i]=clamp(e,0,1.25);
+      continue;
+    }
+
+    if(t===4){
+      if(countAround(i,6)>0&&moisture[i]<.18&&Math.random()<.012){nextType[i]=6;nextEnergy[i]=.7;nextAge[i]=0;nextLineage[i]=0;continue;}
+      var cf4=climateFitness(i,adapt[i]);
+      e=energy[i]-(.009+.00004*gene[i]+(1-cf4)*.012)/s.decay;
+      nextNut[i]=clamp(nextNut[i]+(.009+.000065*gene[i])*s.decay*cf4,0,1.4);
+      if(e<=.025||age[i]>(118-gene[i]*.34)){
+        nextType[i]=0;nextEnergy[i]=0;nextAge[i]=0;nextNut[i]=clamp(nextNut[i]+.20,0,1.4);
+      }else nextEnergy[i]=e;
+    }
+  }
+  var tmp;
+  tmp=type;type=nextType;nextType=tmp;
+  tmp=energy;energy=nextEnergy;nextEnergy=tmp;
+  tmp=age;age=nextAge;nextAge=tmp;
+  tmp=gene;gene=nextGene;nextGene=tmp;
+  tmp=adapt;adapt=nextAdapt;nextAdapt=tmp;
+  tmp=armor;armor=nextArmor;nextArmor=tmp;
+  tmp=lineage;lineage=nextLineage;nextLineage=tmp;
+  tmp=nutrient;nutrient=nextNut;nextNut=tmp;\n  tmp=moisture;moisture=nextMoisture;nextMoisture=tmp;
+  gen++;seasonTick++;eventTick++;
+  if(seasonTick>=430){seasonTick=0;seasonIndex=(seasonIndex+1)%4;addLog('季節が '+seasons[seasonIndex].n+' へ。'+seasons[seasonIndex].text)}
+  if(eventTick>=rnd(520,300)){eventTick=0;worldEvent()}
+  if(gen%40===0)rescue();
+  if(gen%10===0)recordHistory();
+}
+function circleEvent(cx0,cy0,r,fn){var x,y,dx,dy,j;for(y=cy0-r;y<=cy0+r;y++)for(x=cx0-r;x<=cx0+r;x++){dx=x-cx0;dy=y-cy0;if(dx*dx+dy*dy<=r*r){j=id(x,y);if(type[j]!==5)fn(j)}}}
+function worldEvent(){
+  var k=(Math.random()*10)|0,cx0=(Math.random()*W)|0,cy0=(Math.random()*H)|0,r=(rnd(10,4))|0;
+  if(k===0){circleEvent(cx0,cy0,r,function(j){nutrient[j]=clamp(nutrient[j]+rnd(.6,.25),0,1.4);moisture[j]=clamp(moisture[j]+rnd(.55,.25),0,1.15)});addLog('局地的な豪雨。土壌水分と栄養が増え、緑化が始まる。')}
+  else if(k===1){circleEvent(cx0,cy0,r,function(j){moisture[j]*=.35;if(type[j]===1&&Math.random()<.35){type[j]=0;energy[j]=0}nutrient[j]*=.86});addLog('乾燥域が発生。土壌が乾き、火災リスクが上昇。')}
+  else if(k===2){circleEvent(cx0,cy0,r,function(j){if(type[j]===1&&Math.random()<.45){type[j]=4;energy[j]=.5}else if((type[j]===2||type[j]===3)&&Math.random()<.25){type[j]=4;energy[j]=.55}});addLog('病原体の波。密集地で大量死と分解が進む。')}
+  else if(k===3){circleEvent(cx0,cy0,r,function(j){if(type[j]>0&&type[j]<5){gene[j]=mutate(gene[j],.8);adapt[j]=mutate(adapt[j],.7);armor[j]=mutate(armor[j],.6)}});addLog('放射線嵐。代謝・環境適応・防御に大きな突然変異。')}
+  else if(k===4){circleEvent(cx0,cy0,3,function(j){type[j]=5;energy[j]=0;age[j]=0;lineage[j]=0;nutrient[j]=Math.max(.08,nutrient[j]*.7)});circleEvent(cx0,cy0,r,function(j){nutrient[j]=clamp(nutrient[j]+.15,0,1.4)});addLog('小天体が衝突。新しい岩盤と栄養リングが形成。')}
+  else if(k===5){circleEvent(cx0,cy0,r,function(j){if(type[j]===0&&Math.random()<.34){type[j]=1;energy[j]=.6;gene[j]=(rnd(230,30))|0;adapt[j]=clamp(tempAt(j)+rnd(38,-38),20,235);armor[j]=(rnd(145,60))|0;lineage[j]=1;registerLineage(1,1,0)}});addLog('休眠種子が一斉発芽。新しい植物系統が拡大。')}
+  else if(k===6){circleEvent(cx0,cy0,r,function(j){if(type[j]===2&&Math.random()<.4){type[j]=3;energy[j]=.72;lineage[j]=3;registerLineage(3,3,0)}else if(type[j]===3&&Math.random()<.28){type[j]=2;energy[j]=.68;lineage[j]=2;registerLineage(2,2,0)}});addLog('食物網が再編。捕食・被食の境界が反転。')}
+  else if(k===7){circleEvent(cx0,cy0,Math.max(2,(r*.55)|0),function(j){if(Math.random()<.58){type[j]=5;energy[j]=0;age[j]=0;lineage[j]=0}else nutrient[j]=clamp(nutrient[j]+.25,0,1.4)});addLog('地殻変動。新しい岩盤が隆起し、周囲に鉱物栄養が供給された。')}
+  else if(k===8){circleEvent(cx0,cy0,Math.max(2,(r*.45)|0),function(j){if(type[j]===1&&moisture[j]<.48&&Math.random()<.52){type[j]=6;energy[j]=1;age[j]=0;lineage[j]=0}});addLog('落雷。乾いた植物帯から山火事が発生。')}
+  else{circleEvent(cx0,cy0,r,function(j){moisture[j]=clamp(moisture[j]+.18,0,1.15);if(type[j]===6){type[j]=0;energy[j]=0;age[j]=0}});addLog('冷たい前線が通過。火災が弱まり土壌が湿った。')}
+}
+function counts(){
+  var a=[0,0,0,0,0,0,0],gs=[0,0,0,0,0,0,0],gc=[0,0,0,0,0,0,0],i;
+  for(i=0;i<N;i++){a[type[i]]++;if(type[i]>0&&type[i]<5){gs[type[i]]+=gene[i];gc[type[i]]++}}
+  return {a:a,avg:[0,gs[1]/Math.max(1,gc[1]),gs[2]/Math.max(1,gc[2]),gs[3]/Math.max(1,gc[3]),gs[4]/Math.max(1,gc[4])]};
+}
+function recordHistory(){var c=counts();history.push([c.a[1],c.a[2],c.a[3],c.a[4]]);if(history.length>240)history.shift()}
+function phaseInfo(c){
+  var living=c.a[1]+c.a[2]+c.a[3]+c.a[4],ratio=living/N;
+  if(c.a[1]<70)return ['再生期','植物がほぼ消失。分解と栄養蓄積から再出発を待つ。'];
+  if(c.a[3]>c.a[2]*.7)return ['捕食圧期','捕食者が増えすぎ、草食の回廊が細くなっている。'];
+  if(c.a[2]>c.a[1]*.38)return ['過放牧期','草食の波が植物群落を削りながら移動している。'];
+  if(c.a[4]>living*.22)return ['分解期','大量死の跡を分解者が栄養へ戻している。'];
+  if(ratio>.64)return ['飽和期','生物が高密度化し、わずかな変化で連鎖崩壊しやすい。'];
+  if(gen<500)return ['形成期','植物帯の形に沿って食物網が組み上がっている。'];
+  return ['動的平衡','拡大と崩壊が同時進行し、境界が絶えず移動している。'];
+}
+function lineageSummary(){
+  var map={},i,l,m,out=[];
+  for(i=0;i<N;i++){
+    if(type[i]<1||type[i]>4)continue;
+    l=lineage[i]||baseLineageFor(type[i]);
+    m=map[l];
+    if(!m)m=map[l]={id:l,type:type[i],n:0,g:0,a:0,r:0};
+    m.n++;m.g+=gene[i];m.a+=adapt[i];m.r+=armor[i];
+  }
+  for(l in map){m=map[l];m.g/=m.n;m.a/=m.n;m.r/=m.n;out.push(m)}
+  out.sort(function(a,b){return b.n-a.n});
+  return out.slice(0,7);
+}
+function updateUI(){
+  var c=counts(),ph=phaseInfo(c),max=Math.max(c.a[1],c.a[2],c.a[3],c.a[4],1);
+  document.getElementById('gen').textContent='GEN '+gen;
+  document.getElementById('season').textContent=seasons[seasonIndex].n;\n  document.getElementById('fireBadge').textContent='FIRE '+c.a[6];
+  var present=[1,2,3,4].filter(function(t){return c.a[t]>8}).length;
+  var spread=Math.round((Math.max.apply(null,c.avg.slice(1))-Math.min.apply(null,c.avg.slice(1)))/2.15);
+  document.getElementById('diversity').textContent='DIVERSITY '+present+'/4 · MUT '+mutationCount+' · Δ'+spread;
+  document.getElementById('phase').textContent=ph[0];document.getElementById('phaseText').textContent=ph[1];
+  var lab=['','植物','草食','捕食','分解者'],col=['', '#65d96d','#f0c85b','#f07171','#b08ad9'];
+  document.getElementById('stats').innerHTML=[1,2,3,4].map(function(t){
+    return '<div class="stat"><i class="dot" style="background:'+col[t]+'"></i><div><b>'+lab[t]+'</b> <span class="muted">'+phenotype(t,c.avg[t])+' · gene '+Math.round(c.avg[t])+'</span><div class="bar"><i style="width:'+Math.round(c.a[t]/max*100)+'%;background:'+col[t]+'"></i></div></div><b>'+c.a[t]+'</b></div>';
+  }).join('');
+  var lsum=lineageSummary(),jn=['','植物','草食','捕食','分解'];
+  document.getElementById('lineages').innerHTML=lsum.map(function(z){
+    return '<div class="row"><i class="dot" style="background:'+lineageCss(z.id,z.type)+'"></i><div><b>'+jn[z.type]+' L'+z.id+'</b> <span class="muted">適応 '+Math.round(z.a)+' / 防御 '+Math.round(z.r)+'</span></div><b>'+z.n+'</b></div>';
+  }).join('');
+  document.getElementById('feed').innerHTML=logs.map(function(e){return '<div class="ev"><small>GEN '+e.g+'</small>'+e.s+'</div>'}).join('');
+  drawChart();
+}
+function draw(){
+  var im=ctx.createImageData(W,H),d=im.data,i,t,b,k=0;
+  for(i=0;i<N;i++){
+    t=type[i];
+    if(t===0){b=18+Math.round(nutrient[i]*22);d[k]=5;d[k+1]=b;d[k+2]=Math.round(b*1.05)}
+    else{
+      if(t===6){
+        b=.72+Math.random()*.28;
+        d[k]=Math.min(255,Math.round(colors[t][0]*b));
+        d[k+1]=Math.min(255,Math.round(colors[t][1]*b));
+        d[k+2]=Math.min(255,Math.round(colors[t][2]*b));
+      }else if(t===5){
+        b=clamp(.58+energy[i]*.52,.55,1.12);
+        d[k]=Math.min(255,Math.round(colors[t][0]*b));
+        d[k+1]=Math.min(255,Math.round(colors[t][1]*b));
+        d[k+2]=Math.min(255,Math.round(colors[t][2]*b));
+      }else{
+        b=clamp(.52+energy[i]*.55,.45,1.18);
+        var gv=(gene[i]-128)/127,ls=lineageColorShift(lineage[i]||t);
+        d[k]=Math.min(255,Math.max(0,Math.round(colors[t][0]*b+gv*18+ls)));
+        d[k+1]=Math.min(255,Math.max(0,Math.round(colors[t][1]*b-gv*7+ls*.35)));
+        d[k+2]=Math.min(255,Math.max(0,Math.round(colors[t][2]*b-gv*15-ls*.25)));
+      }
+    }
+    d[k+3]=255;k+=4;
+  }
+  ctx.putImageData(im,0,0);
+}
+function drawChart(){
+  cx.clearRect(0,0,chart.width,chart.height);cx.fillStyle='#07131a';cx.fillRect(0,0,chart.width,chart.height);
+  if(history.length<2)return;
+  var cols=['#65d96d','#f0c85b','#f07171','#b08ad9'],m=1,i,j;
+  history.forEach(function(v){for(j=0;j<4;j++)m=Math.max(m,v[j])});
+  cx.lineWidth=1.5;
+  for(j=0;j<4;j++){
+    cx.beginPath();cx.strokeStyle=cols[j];
+    for(i=0;i<history.length;i++){
+      var px=i/(239)*chart.width,py=chart.height-6-history[i][j]/m*(chart.height-12);
+      if(i===0)cx.moveTo(px,py);else cx.lineTo(px,py);
+    }
+    cx.stroke();
+  }
+}
+function frame(now){
+  var dt=Math.min(.08,(now-last)/1000);last=now;
+  if(!paused){acc+=dt*stepRate*speed;while(acc>=1){step();acc--;if(gen%4===0)draw();if(gen%20===0)updateUI()}}
+  requestAnimationFrame(frame);
+}
+document.getElementById('pause').addEventListener('click',function(){paused=!paused;this.textContent=paused?'RESUME':'PAUSE'});
+document.getElementById('new').addEventListener('click',init);
+Array.prototype.forEach.call(document.querySelectorAll('.sp'),function(b){b.addEventListener('click',function(){speed=Number(this.getAttribute('data-s'));Array.prototype.forEach.call(document.querySelectorAll('.sp'),function(q){q.classList.toggle('on',q===b)})})});
+init();requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
