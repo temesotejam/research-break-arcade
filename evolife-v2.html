@@ -60,7 +60,7 @@ button.on{background:#153d4e;border-color:#6bd9ef}.layout{display:grid;grid-temp
         <span><i class="sw" style="background:#f0c85b"></i>草食</span>
         <span><i class="sw" style="background:#f07171"></i>捕食</span>
         <span><i class="sw" style="background:#b08ad9"></i>分解者</span>
-        <span><i class="sw" style="background:#54727d"></i>岩盤</span>
+        <span><i class="sw" style="background:#54727d"></i>岩盤→風化→土壌</span>
         <span>明るいほど活力 / 栄養が高い</span>
       </div>
     </section>
@@ -81,7 +81,7 @@ button.on{background:#153d4e;border-color:#6bd9ef}.layout{display:grid;grid-temp
       </div>
       <div class="sec"><h2>CHRONICLE</h2></div>
       <div class="feed" id="feed"></div>
-      <div class="note">固定ルールだけでなく、繁殖時に代謝特性が少しずつ変異します。栄養の高い空地には休眠種子、植物帯には草食の休眠卵、草食帯には捕食者の休眠卵が残ります。局所集団が極端に減ったときだけ休眠バンクから再生するため、世界全体が永久に0になることはありません。</div>
+      <div class="note">固定ルールだけでなく、繁殖時に代謝特性が少しずつ変異します。栄養の高い空地には休眠種子、植物帯には草食の休眠卵、草食帯には捕食者の休眠卵が残ります。岩盤も永久壁ではなく、雨・植物・分解者の影響でゆっくり風化し、最後は栄養の多い土壌へ戻ります。</div>
     </aside>
   </div>
 </main>
@@ -179,7 +179,21 @@ function step(){
     t=type[i];p=countAround(i,1);g=countAround(i,2);h=countAround(i,3);d=countAround(i,4);localN=avgNut(i);
     nextType[i]=t;nextEnergy[i]=energy[i];nextAge[i]=age[i]+1;nextGene[i]=gene[i];
     nextNut[i]=clamp(nutrient[i]*.965+localN*.035,0,1.4);
-    if(t===5)continue;
+    if(t===5){
+      var wet=seasonIndex===0?1.45:seasonIndex===2?1.2:seasonIndex===3?.72:1.0;
+      var weather=(.00018 + p*.00016 + d*.00034 + localN*.00008)*wet;
+      nextEnergy[i]=clamp(energy[i]+weather,0,1.15);
+      nextNut[i]=clamp(nextNut[i]+d*.00045+p*.00018,0,1.4);
+      if(nextEnergy[i]>=1 || (age[i]>5200 && Math.random()<.0025)){
+        nextType[i]=0;
+        nextEnergy[i]=0;
+        nextAge[i]=0;
+        nextGene[i]=128;
+        nextNut[i]=clamp(nextNut[i]+.55,0,1.4);
+        if(Math.random()<.028)addLog('風化した岩盤が崩れ、栄養の多い新しい土壌が生まれた。');
+      }
+      continue;
+    }
 
     if(t===0){
       nextEnergy[i]=0;nextAge[i]=0;
@@ -258,7 +272,7 @@ function worldEvent(){
   else if(k===1){circleEvent(cx0,cy0,r,function(j){if(type[j]===1&&Math.random()<.48){type[j]=0;energy[j]=0}nutrient[j]*=.82});addLog('乾燥域が発生。植物帯に大きな空白。')}
   else if(k===2){circleEvent(cx0,cy0,r,function(j){if(type[j]===1&&Math.random()<.45){type[j]=4;energy[j]=.5}else if((type[j]===2||type[j]===3)&&Math.random()<.25){type[j]=4;energy[j]=.55}});addLog('病原体の波。密集地で大量死と分解が進む。')}
   else if(k===3){circleEvent(cx0,cy0,r,function(j){if(type[j]>0&&type[j]<5)gene[j]=mutate(gene[j],.8)});addLog('放射線嵐。局所的に突然変異率が急上昇。')}
-  else if(k===4){circleEvent(cx0,cy0,3,function(j){type[j]=5;energy[j]=0});circleEvent(cx0,cy0,r,function(j){nutrient[j]=clamp(nutrient[j]+.15,0,1.4)});addLog('小天体が衝突。新しい岩盤と栄養リングが形成。')}
+  else if(k===4){circleEvent(cx0,cy0,3,function(j){type[j]=5;energy[j]=0;age[j]=0;nutrient[j]=Math.max(.08,nutrient[j]*.7)});circleEvent(cx0,cy0,r,function(j){nutrient[j]=clamp(nutrient[j]+.15,0,1.4)});addLog('小天体が衝突。新しい岩盤と栄養リングが形成。')}
   else if(k===5){circleEvent(cx0,cy0,r,function(j){if(type[j]===0&&Math.random()<.34){type[j]=1;energy[j]=.6;gene[j]=(rnd(230,30))|0}});addLog('休眠種子が一斉発芽。新しい植物系統が拡大。')}
   else{circleEvent(cx0,cy0,r,function(j){if(type[j]===2&&Math.random()<.4){type[j]=3;energy[j]=.72}else if(type[j]===3&&Math.random()<.28){type[j]=2;energy[j]=.68}});addLog('食物網が再編。捕食・被食の境界が反転。')}
 }
@@ -298,7 +312,19 @@ function draw(){
   for(i=0;i<N;i++){
     t=type[i];
     if(t===0){b=18+Math.round(nutrient[i]*22);d[k]=5;d[k+1]=b;d[k+2]=Math.round(b*1.05)}
-    else{b=clamp(.52+energy[i]*.55,.45,1.18);d[k]=Math.min(255,Math.round(colors[t][0]*b));d[k+1]=Math.min(255,Math.round(colors[t][1]*b));d[k+2]=Math.min(255,Math.round(colors[t][2]*b))}
+    else{
+      if(t===5){
+        b=clamp(.58+energy[i]*.52,.55,1.12);
+        d[k]=Math.min(255,Math.round(colors[t][0]*b));
+        d[k+1]=Math.min(255,Math.round(colors[t][1]*b));
+        d[k+2]=Math.min(255,Math.round(colors[t][2]*b));
+      }else{
+        b=clamp(.52+energy[i]*.55,.45,1.18);
+        d[k]=Math.min(255,Math.round(colors[t][0]*b));
+        d[k+1]=Math.min(255,Math.round(colors[t][1]*b));
+        d[k+2]=Math.min(255,Math.round(colors[t][2]*b));
+      }
+    }
     d[k+3]=255;k+=4;
   }
   ctx.putImageData(im,0,0);
