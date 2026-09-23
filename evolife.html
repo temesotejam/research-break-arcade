@@ -33,7 +33,7 @@ button.on{background:#153d4e;border-color:#6bd9ef}.layout{display:grid;grid-temp
     <div>
       <div class="k">RESEARCH BREAK ARCADE / CELLULAR ECOSYSTEM</div>
       <h1>EvoLife</h1>
-      <p class="desc">ライフゲームを生態系へ発展。各セルは周囲8マスだけを見て、植物・草食・捕食・分解・栄養が連鎖します。操作しなくても、侵食波・渦・絶滅・復活・突然変異が勝手に生まれます。</p>
+      <p class="desc">ライフゲームを生態系へ発展。各セルは周囲8マスとその場所の栄養だけを見て、植物・草食・捕食・分解・栄養が連鎖します。休眠種子や卵もあるため、一度崩壊しても条件が戻れば自然に再生します。</p>
     </div>
     <div class="ctrl">
       <button id="pause">PAUSE</button>
@@ -81,7 +81,7 @@ button.on{background:#153d4e;border-color:#6bd9ef}.layout{display:grid;grid-temp
       </div>
       <div class="sec"><h2>CHRONICLE</h2></div>
       <div class="feed" id="feed"></div>
-      <div class="note">固定ルールだけでなく、繁殖時に代謝特性が少しずつ変異します。強い型が増えても環境や捕食圧が変わるため、永遠に同じ勝者にはなりません。</div>
+      <div class="note">固定ルールだけでなく、繁殖時に代謝特性が少しずつ変異します。全滅を防ぐための強制リセットではなく、栄養の高い空地から休眠種子が発芽し、餌が十分なら休眠卵から草食・捕食が低確率で復活します。</div>
     </aside>
   </div>
 </main>
@@ -99,7 +99,7 @@ var seasons=[
   {n:'SPRING',plant:1.45,graze:1.0,decay:1.0,text:'植物の繁殖が加速。食物網の土台が広がる。'},
   {n:'SUMMER',plant:1.0,graze:1.22,decay:.9,text:'草食の増殖が強まり、植物群落へ圧力がかかる。'},
   {n:'AUTUMN',plant:.78,graze:1.0,decay:1.45,text:'分解が加速し、死骸が次世代の栄養へ戻る。'},
-  {n:'WINTER',plant:.46,graze:.72,decay:.8,text:'成長が鈍化。蓄えの少ない系統が淘汰される。'}
+  {n:'WINTER',plant:.62,graze:.72,decay:.8,text:'成長が鈍化。蓄えの少ない系統が淘汰される。'}
 ];
 function rnd(a,b){return (b===undefined?0:b)+Math.random()*(a-(b===undefined?0:b))}
 function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
@@ -155,18 +155,24 @@ function step(){
 
     if(t===0){
       nextEnergy[i]=0;nextAge[i]=0;
-      if(p>0 && p<6 && nutrient[i]>.16 && Math.random()<(p*.018+.012)*s.plant*nutrient[i]){
-        nextType[i]=1;nextEnergy[i]=.42;nextGene[i]=mutate(neighborGene(i,1),.012);nextNut[i]=Math.max(0,nextNut[i]-.045);
-      }else if(d>0 && (p+g+h)>1 && Math.random()<d*.006*s.decay){
+      if(p>=5 && g===0 && Math.random()<.0015*s.graze){
+        nextType[i]=2;nextEnergy[i]=.62;nextGene[i]=mutate(neighborGene(i,2),.08);nextAge[i]=0;
+      }else if(g>=3 && h===0 && Math.random()<.0010){
+        nextType[i]=3;nextEnergy[i]=.66;nextGene[i]=mutate(neighborGene(i,3),.08);nextAge[i]=0;
+      }else if(p>0 && p<7 && nutrient[i]>.11 && Math.random()<(p*.024+.018)*s.plant*(.45+.65*nutrient[i])){
+        nextType[i]=1;nextEnergy[i]=.48;nextGene[i]=mutate(neighborGene(i,1),.012);nextNut[i]=Math.max(0,nextNut[i]-.035);
+      }else if(p===0 && nutrient[i]>.25 && Math.random()<.0008*s.plant*nutrient[i]){
+        nextType[i]=1;nextEnergy[i]=.44;nextGene[i]=mutate(128,.12);nextNut[i]=Math.max(0,nextNut[i]-.025);
+      }else if(d>0 && (p+g+h)>1 && Math.random()<d*.005*s.decay){
         nextType[i]=4;nextEnergy[i]=.42;nextGene[i]=mutate(neighborGene(i,4),.01);
       }
       continue;
     }
 
     if(t===1){
-      e=energy[i]+(.022+.000075*gene[i])*s.plant*nutrient[i]-.013;
-      nextNut[i]=Math.max(0,nextNut[i]-(.008+.000018*gene[i]));
-      if(g>0 && Math.random()<g*(.065+.00011*(220-gene[i]))*s.graze){
+      e=energy[i]+(.028+.00007*gene[i])*s.plant*(.35+.65*nutrient[i])-.010;
+      nextNut[i]=Math.max(0,nextNut[i]-(.006+.000014*gene[i]));
+      if(g>0 && Math.random()<g*(.026+.000045*(220-gene[i]))*s.graze){
         nextType[i]=2;nextEnergy[i]=clamp(.48+energy[i]*.24,0,1.2);nextGene[i]=mutate(neighborGene(i,2),.018);nextAge[i]=0;
       }else if((p>=7 && Math.random()<.16)||e<=.04||age[i]>900+gene[i]*3){
         dieToDecomposer(i,.30+.05*d);
@@ -175,31 +181,31 @@ function step(){
     }
 
     if(t===2){
-      e=energy[i]-(.024+.000045*gene[i]);
-      if(p>0)e+=.028*Math.min(4,p);
-      if(h>0 && Math.random()<h*(.082+.00008*gene[i])){
+      e=energy[i]-(.018+.00003*gene[i]);
+      if(p>0)e+=.034*Math.min(4,p);
+      if(h>0 && Math.random()<h*(.031+.000035*gene[i])){
         nextType[i]=3;nextEnergy[i]=clamp(.5+energy[i]*.22,0,1.2);nextGene[i]=mutate(neighborGene(i,3),.018);nextAge[i]=0;
-      }else if(e<.05 || (p===0&&age[i]>85+gene[i])){
+      }else if(e<.05 || (p===0&&age[i]>48+gene[i]*.45)){
         dieToDecomposer(i,.48);
-      }else if(g>5&&p<2&&Math.random()<.08){
+      }else if(g>5&&p<2&&Math.random()<.045){
         dieToDecomposer(i,.3);
       }else nextEnergy[i]=clamp(e,0,1.25);
       continue;
     }
 
     if(t===3){
-      e=energy[i]-(.029+.000038*gene[i]);
-      if(g>0)e+=.035*Math.min(4,g);
-      if(e<.045 || (g===0&&age[i]>68+gene[i])){
+      e=energy[i]-(.021+.000028*gene[i]);
+      if(g>0)e+=.045*Math.min(4,g);
+      if(e<.045 || (g===0&&age[i]>42+gene[i]*.42)){
         dieToDecomposer(i,.62);
-      }else if(h>5&&g<2&&Math.random()<.075){
+      }else if(h>5&&g<2&&Math.random()<.045){
         dieToDecomposer(i,.5);
       }else nextEnergy[i]=clamp(e,0,1.25);
       continue;
     }
 
     if(t===4){
-      e=energy[i]-.026/s.decay;
+      e=energy[i]-.022/s.decay;
       nextNut[i]=clamp(nextNut[i]+.018*s.decay,0,1.4);
       if(e<=.025||age[i]>36+gene[i]*.34){
         nextType[i]=0;nextEnergy[i]=0;nextAge[i]=0;nextNut[i]=clamp(nextNut[i]+.20,0,1.4);
@@ -221,8 +227,8 @@ function circleEvent(cx0,cy0,r,fn){var x,y,dx,dy,j;for(y=cy0-r;y<=cy0+r;y++)for(
 function worldEvent(){
   var k=(Math.random()*7)|0,cx0=(Math.random()*W)|0,cy0=(Math.random()*H)|0,r=(rnd(10,4))|0;
   if(k===0){circleEvent(cx0,cy0,r,function(j){nutrient[j]=clamp(nutrient[j]+rnd(.6,.25),0,1.4)});addLog('局地的な豪雨。栄養が流入し緑化が始まる。')}
-  else if(k===1){circleEvent(cx0,cy0,r,function(j){if(type[j]===1&&Math.random()<.72){type[j]=0;energy[j]=0}nutrient[j]*=.72});addLog('乾燥域が発生。植物帯に大きな空白。')}
-  else if(k===2){circleEvent(cx0,cy0,r,function(j){if(type[j]===1&&Math.random()<.68){type[j]=4;energy[j]=.5}else if((type[j]===2||type[j]===3)&&Math.random()<.38){type[j]=4;energy[j]=.55}});addLog('病原体の波。密集地で大量死と分解が進む。')}
+  else if(k===1){circleEvent(cx0,cy0,r,function(j){if(type[j]===1&&Math.random()<.48){type[j]=0;energy[j]=0}nutrient[j]*=.82});addLog('乾燥域が発生。植物帯に大きな空白。')}
+  else if(k===2){circleEvent(cx0,cy0,r,function(j){if(type[j]===1&&Math.random()<.45){type[j]=4;energy[j]=.5}else if((type[j]===2||type[j]===3)&&Math.random()<.25){type[j]=4;energy[j]=.55}});addLog('病原体の波。密集地で大量死と分解が進む。')}
   else if(k===3){circleEvent(cx0,cy0,r,function(j){if(type[j]>0&&type[j]<5)gene[j]=mutate(gene[j],.8)});addLog('放射線嵐。局所的に突然変異率が急上昇。')}
   else if(k===4){circleEvent(cx0,cy0,3,function(j){type[j]=5;energy[j]=0});circleEvent(cx0,cy0,r,function(j){nutrient[j]=clamp(nutrient[j]+.15,0,1.4)});addLog('小天体が衝突。新しい岩盤と栄養リングが形成。')}
   else if(k===5){circleEvent(cx0,cy0,r,function(j){if(type[j]===0&&Math.random()<.34){type[j]=1;energy[j]=.6;gene[j]=(rnd(230,30))|0}});addLog('休眠種子が一斉発芽。新しい植物系統が拡大。')}
