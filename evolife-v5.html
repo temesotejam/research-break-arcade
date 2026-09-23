@@ -50,7 +50,9 @@ button.on{background:#153d4e;border-color:#6bd9ef}.layout{display:grid;grid-temp
         <div class="badges">
           <span class="b" id="gen">GEN 0</span>
           <span class="b" id="season">SPRING</span>
-          <span class="b" id="diversity">DIVERSITY --</span>\n          <span class="b">BUILD V5</span>\n          <span class="b" id="fireBadge">FIRE 0</span>
+          <span class="b" id="diversity">DIVERSITY --</span>
+          <span class="b">BUILD V5</span>
+          <span class="b" id="fireBadge">FIRE 0</span>
         </div>
         <span class="b" id="headline">生態系を生成中…</span>
       </div>
@@ -60,7 +62,8 @@ button.on{background:#153d4e;border-color:#6bd9ef}.layout{display:grid;grid-temp
         <span><i class="sw" style="background:#f0c85b"></i>草食</span>
         <span><i class="sw" style="background:#f07171"></i>捕食</span>
         <span><i class="sw" style="background:#b08ad9"></i>分解者</span>
-        <span><i class="sw" style="background:#54727d"></i>岩盤→風化→土壌</span>\n        <span><i class="sw" style="background:#ff7a3d"></i>火災</span>
+        <span><i class="sw" style="background:#54727d"></i>岩盤→風化→土壌</span>
+        <span><i class="sw" style="background:#ff7a3d"></i>火災</span>
         <span>明るいほど活力 / 栄養が高い</span>
       </div>
     </section>
@@ -182,7 +185,8 @@ function init(){
   for(i=0;i<N;i++){
     x=i%W;y=(i/W)|0;
     n=.35+.35*Math.sin(x*.095)+.18*Math.sin(y*.17+x*.035)+rnd(.22,-.08);
-    nutrient[i]=clamp(n,.05,1);\n    moisture[i]=clamp(.52+.22*Math.sin(y*.11)-.12*Math.sin(x*.07)+rnd(.18,-.12),.08,1);
+    nutrient[i]=clamp(n,.05,1);
+    moisture[i]=clamp(.52+.22*Math.sin(y*.11)-.12*Math.sin(x*.07)+rnd(.18,-.12),.08,1);
     gene[i]=(rnd(171,85))|0;
     adapt[i]=clamp(tempAt(i)+Math.round(rnd(50,-50)),20,235);
     armor[i]=(rnd(145,65))|0;
@@ -348,7 +352,8 @@ function step(){
   tmp=adapt;adapt=nextAdapt;nextAdapt=tmp;
   tmp=armor;armor=nextArmor;nextArmor=tmp;
   tmp=lineage;lineage=nextLineage;nextLineage=tmp;
-  tmp=nutrient;nutrient=nextNut;nextNut=tmp;\n  tmp=moisture;moisture=nextMoisture;nextMoisture=tmp;
+  tmp=nutrient;nutrient=nextNut;nextNut=tmp;
+  tmp=moisture;moisture=nextMoisture;nextMoisture=tmp;
   gen++;seasonTick++;eventTick++;
   if(seasonTick>=430){seasonTick=0;seasonIndex=(seasonIndex+1)%4;addLog('季節が '+seasons[seasonIndex].n+' へ。'+seasons[seasonIndex].text)}
   if(eventTick>=rnd(520,300)){eventTick=0;worldEvent()}
@@ -401,7 +406,8 @@ function lineageSummary(){
 function updateUI(){
   var c=counts(),ph=phaseInfo(c),max=Math.max(c.a[1],c.a[2],c.a[3],c.a[4],1);
   document.getElementById('gen').textContent='GEN '+gen;
-  document.getElementById('season').textContent=seasons[seasonIndex].n;\n  document.getElementById('fireBadge').textContent='FIRE '+c.a[6];
+  document.getElementById('season').textContent=seasons[seasonIndex].n;
+  document.getElementById('fireBadge').textContent='FIRE '+c.a[6];
   var present=[1,2,3,4].filter(function(t){return c.a[t]>8}).length;
   var spread=Math.round((Math.max.apply(null,c.avg.slice(1))-Math.min.apply(null,c.avg.slice(1)))/2.15);
   document.getElementById('diversity').textContent='DIVERSITY '+present+'/4 · MUT '+mutationCount+' · Δ'+spread;
