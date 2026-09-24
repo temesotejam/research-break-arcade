@@ -174,15 +174,6 @@ function returnToTown(p){
  returns++;p.state='town';p.town=irnd(8,4);p.gold+=p.loot*(12+p.floor*2);if(p.loot)addLog(p.name+' が戦利品を持って帰還。',p);p.loot=0;p.floor=0;p.route=[];p.target=null;p.battle=null;
 }
 function handleCell(p){
- 
- // 通路床の中央ガイド
- ctx.strokeStyle='rgba(238,220,174,.55)';ctx.lineWidth=3;
- ctx.beginPath();ctx.moveTo(cx,h*.96);ctx.lineTo(cx,h*.55);ctx.stroke();
- for(var gd=0;gd<4;gd++){
-   var ga=L[gd],gb=L[gd+1];
-   ctx.strokeStyle='rgba(245,229,189,'+(0.18+gd*.05)+')';ctx.lineWidth=2;
-   ctx.beginPath();ctx.moveTo(ga.l,ga.b);ctx.lineTo(ga.r,ga.b);ctx.stroke();
- }
  var fd=floorData(p.floor),ii=key(p.x,p.y),e=fd.events[ii];
  if(e===1){fd.events[ii]=0;var g=irnd(28+p.floor*13,8);p.gold+=g;p.loot+=irnd(4,1);p.decision='宝箱を開けた';addLog(p.name+' が宝箱から '+g+'G を得た。',p)}
  else if(e===2){fd.events[ii]=0;if(Math.random()<.72){p.hp=Math.min(p.maxHp,p.hp+Math.ceil(p.maxHp*.4));p.decision='泉で傷を癒す';addLog(p.name+' が泉で回復。',p)}else{p.hp-=irnd(10+p.floor,3);addLog(p.name+' が毒の泉で傷ついた。',p);if(p.hp<=0)downPlayer(p,'毒')}}
@@ -247,6 +238,15 @@ function drawDungeon(p){
    poly([[a.l,a.t],[a.r,a.t],[b.r,b.t],[b.l,b.t]],'#12110e','#4f4634');
    poly([[b.l,b.b],[b.r,b.b],[a.r,a.b],[a.l,a.b]],'#7f765f','#b7a783');
    if(wall(p,depth,0,'front')){poly([[b.l,b.t],[b.r,b.t],[b.r,b.b],[b.l,b.b]],'rgb('+(60+depth*3)+','+(38+depth*2)+','+(30+depth)+')','#b39768')}
+ }
+ 
+ // 通路床の中央ガイド
+ ctx.strokeStyle='rgba(238,220,174,.55)';ctx.lineWidth=3;
+ ctx.beginPath();ctx.moveTo(cx,h*.96);ctx.lineTo(cx,h*.55);ctx.stroke();
+ for(var gd=0;gd<4;gd++){
+   var ga=L[gd];
+   ctx.strokeStyle='rgba(245,229,189,'+(0.18+gd*.05)+')';ctx.lineWidth=2;
+   ctx.beginPath();ctx.moveTo(ga.l,ga.b);ctx.lineTo(ga.r,ga.b);ctx.stroke();
  }
  var fd=floorData(p.floor),ii=key(p.x,p.y),e=fd.events[ii];
  if(e){ctx.textAlign='center';ctx.font='700 54px Georgia';ctx.fillStyle=e===1?'#d7b66b':e===2?'#7bc7d4':e===3?'#d47474':'#d8d5c9';ctx.fillText(e===1?'□':e===2?'✦':e===3?'!':'◇',cx,h*.66)}
