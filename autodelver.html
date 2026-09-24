@@ -36,7 +36,7 @@ button.on{background:#3b3020;border-color:#c8aa68}.layout{display:grid;grid-temp
 <section class="card">
   <div class="head"><div class="badges"><span class="badge" id="floor">B1F</span><span class="badge" id="follow">FOLLOW --</span><span class="badge" id="state">TOWN</span><span class="badge" id="dir">NORTH</span></div><span class="badge" id="headline">ギルド結成中…</span></div>
   <div class="view"><canvas id="view" width="960" height="600" aria-label="一人称ダンジョン探索"></canvas></div>
-  <div class="caption">カメラは冒険者を自動追跡。各冒険者は独立した位置・向き・記憶地図・目的を持ちます。角では旋回し、その次の行動で1マス前進します。</div>
+  <div class="caption">カメラは冒険者を自動追跡。各冒険者は独立した位置・向き・記憶地図・目的を持ちます。角では約0.4秒かけて滑らかに旋回し、その次の行動で1マス前進します。</div>
 </section>
 <aside class="card">
   <div class="sec"><h2>FOLLOWED DELVER</h2><div class="mode" id="mode">街で準備中</div><div class="sub" id="decision">複数の冒険者が別々に準備しています。</div></div>
@@ -52,6 +52,8 @@ button.on{background:#3b3020;border-color:#c8aa68}.layout{display:grid;grid-temp
 (function(){
 'use strict';
 var V=document.getElementById('view'),ctx=V.getContext('2d'),M=document.getElementById('mini'),mx=M.getContext('2d');
+var turnA=document.createElement('canvas'),turnB=document.createElement('canvas'),turnCtxA=turnA.getContext('2d'),turnCtxB=turnB.getContext('2d'),visualNow=0;
+turnA.width=turnB.width=V.width;turnA.height=turnB.height=V.height;
 var W=17,H=17,DIRS=[[0,-1],[1,0],[0,1],[-1,0]],DN=['NORTH','EAST','SOUTH','WEST'];
 var floors={},players=[],logs=[],paused=false,speed=1,last=performance.now(),acc=0,rate=2.25,tick=0,focus=0,focusAge=0;
 var deepest=1,deaths=0,returns=0,relics=0,meetings=0;
@@ -99,7 +101,7 @@ function farthest(grid,sx,sy){
 function floorData(f){if(!floors[f])floors[f]=makeFloor(f);return floors[f]}
 function freshPlayer(i){
  var t=TRAITS[i],p={id:i,name:NAMES[i],color:COLORS[i],trait:t.name,risk:t.risk,greed:t.greed,depthDrive:t.depth,retreatAt:t.retreat,encourage:t.enc,
- x:1,y:1,dir:i%4,floor:1,seen:{},route:[],target:null,state:'town',decision:'準備中',hp:42,maxHp:42,mp:8,maxMp:8,atk:10+i,def:5+(i===3?2:0),lv:1,xp:0,gold:80,loot:0,potions:2,battle:null,town:irnd(7,2),down:0,lastMeet:-99,maxFloor:1,kills:0,turn:0,move:0};
+ x:1,y:1,dir:i%4,floor:1,seen:{},route:[],target:null,state:'town',decision:'準備中',hp:42,maxHp:42,mp:8,maxMp:8,atk:10+i,def:5+(i===3?2:0),lv:1,xp:0,gold:80,loot:0,potions:2,battle:null,town:irnd(7,2),down:0,lastMeet:-99,maxFloor:1,kills:0,turn:0,move:0,turnAnim:null};
  p.seen[1]=new Uint8Array(W*H);return p;
 }
 function init(){
@@ -139,6 +141,9 @@ function chooseTarget(p){
 }
 function explored(p){var fd=floorData(p.floor),s=seenFor(p,p.floor),a=0,b=0;for(var i=0;i<s.length;i++)if(fd.grid[i]){b++;if(s[i])a++}return b?a/b:0}
 function desiredDir(p,nx,ny){var dx=nx-p.x,dy=ny-p.y;if(dx===1)return 1;if(dx===-1)return 3;if(dy===1)return 2;return 0}
+function startTurnAnim(p,from,to,sign){
+ p.turnAnim={from:from,to:to,sign:sign,start:performance.now(),duration:Math.max(150,390/Math.sqrt(speed||1))};
+}
 function enterDungeon(p){
  p.floor=Math.max(1,Math.min(p.maxFloor,1+Math.floor((p.lv-1)/3)));p.x=1;p.y=1;p.dir=irnd(4);p.route=[];p.target=null;p.state='explore';p.battle=null;reveal(p);p.decision='独立探索を開始';
  addLog(p.name+' が B'+p.floor+'F に進入。',p);
@@ -157,10 +162,10 @@ function exploreStep(p){
  if(!p.route.length){
    p.target=chooseTarget(p);p.route=bfs(p,p.target[0],p.target[1],true);
    if(!p.route.length)p.route=bfs(p,p.target[0],p.target[1],false);
-   if(!p.route.length){p.dir=(p.dir+(Math.random()<.5?1:3))%4;p.turn=1;return}
+   if(!p.route.length){var from0=p.dir,sg0=Math.random()<.5?1:-1;p.dir=(p.dir+(sg0>0?1:3))%4;startTurnAnim(p,from0,p.dir,sg0);p.turn=1;p.decision=sg0>0?'右へ旋回':'左へ旋回';return}
  }
  var n=p.route[0],want=desiredDir(p,n[0],n[1]);
- if(p.dir!==want){var delta=(want-p.dir+4)%4;p.dir=delta===3?(p.dir+3)%4:(p.dir+1)%4;p.turn=1;p.decision=delta===3?'左へ旋回':'右へ旋回';return}
+ if(p.dir!==want){var delta=(want-p.dir+4)%4,fromDir=p.dir,turnSign=delta===3?-1:1;p.dir=turnSign<0?(p.dir+3)%4:(p.dir+1)%4;startTurnAnim(p,fromDir,p.dir,turnSign);p.turn=1;p.decision=turnSign<0?'左へ旋回':'右へ旋回';return}
  p.x=n[0];p.y=n[1];p.route.shift();p.move=1;reveal(p);p.decision='1マス前進';rescueHere(p);meetHere(p);
  if(Math.random()<(.075+p.floor*.011)*p.encourage&&p.state==='explore'){startBattle(p);return}
  handleCell(p);
@@ -271,7 +276,7 @@ function texturedFloor(a,base,edge,depth){
    for(var y2=b.minY+8;y2<b.maxY;y2+=14){ctx.beginPath();ctx.moveTo(b.minX,y2);ctx.lineTo(b.maxX,y2);ctx.stroke()}
  });
 }
-function drawDungeon(p){
+function drawDungeonStatic(p){
  var w=V.width,h=V.height,cx=w/2,cy=h*.52;
  ctx.fillStyle='#020304';ctx.fillRect(0,0,w,h);
  var bg=ctx.createLinearGradient(0,0,0,h);bg.addColorStop(0,'#050608');bg.addColorStop(.48,'#12100c');bg.addColorStop(1,'#090806');ctx.fillStyle=bg;ctx.fillRect(0,0,w,h);
@@ -307,6 +312,41 @@ function drawDungeon(p){
  if(p.state==='down'){ctx.fillStyle='rgba(80,0,0,.32)';ctx.fillRect(0,0,w,h);ctx.fillStyle='#d6b0a5';ctx.font='800 28px Georgia';ctx.textAlign='center';ctx.fillText('DOWN — 救助を待っている',cx,h*.55)}
  ctx.fillStyle='rgba(0,0,0,.62)';ctx.fillRect(14,14,280,64);ctx.textAlign='left';ctx.fillStyle=p.color;ctx.font='800 18px monospace';ctx.fillText(p.name+' / '+p.trait,28,39);ctx.fillStyle='#b3aa97';ctx.font='12px monospace';ctx.fillText('B'+p.floor+'F  HP '+Math.max(0,p.hp)+'/'+p.maxHp+'  '+DN[p.dir],28,61);
 }
+function smoothstep(t){return t*t*(3-2*t)}
+function renderDungeonBuffer(target,p,dir){
+ var oldCtx=ctx,oldDir=p.dir;
+ ctx=target;p.dir=dir;
+ drawDungeonStatic(p);
+ p.dir=oldDir;ctx=oldCtx;
+}
+function drawTurnTransition(p,a){
+ var t=clamp((visualNow-a.start)/a.duration,0,1),e=smoothstep(t),w=V.width,h=V.height,shift=w*.72*e,sg=a.sign;
+ renderDungeonBuffer(turnCtxA,p,a.from);
+ renderDungeonBuffer(turnCtxB,p,a.to);
+ ctx.fillStyle='#020304';ctx.fillRect(0,0,w,h);
+ ctx.save();
+ ctx.globalAlpha=1-e*.35;
+ ctx.drawImage(turnA,-sg*shift,0,w,h);
+ ctx.restore();
+ ctx.save();
+ ctx.globalAlpha=.55+.45*e;
+ ctx.drawImage(turnB,sg*(w*.72-shift),0,w,h);
+ ctx.restore();
+
+ // 旋回方向の視覚ガイド
+ ctx.fillStyle='rgba(0,0,0,.66)';ctx.fillRect(w*.39,h*.82,w*.22,48);
+ ctx.textAlign='center';ctx.font='800 20px monospace';ctx.fillStyle='#f2d897';
+ ctx.fillText(sg>0?'TURN  →':'←  TURN',w*.5,h*.873);
+ ctx.fillStyle='rgba(242,216,151,.45)';ctx.fillRect(w*.405,h*.895,w*.19,4);
+ ctx.fillStyle='#f2d897';
+ if(sg>0)ctx.fillRect(w*.405,h*.895,w*.19*e,4);
+ else ctx.fillRect(w*.595-w*.19*e,h*.895,w*.19*e,4);
+ if(t>=1)p.turnAnim=null;
+}
+function drawDungeon(p){
+ if(p.turnAnim&&visualNow-p.turnAnim.start<p.turnAnim.duration+40)drawTurnTransition(p,p.turnAnim);
+ else{p.turnAnim=null;drawDungeonStatic(p)}
+}
 function drawTown(p){
  ctx.fillStyle='#0b0d12';ctx.fillRect(0,0,V.width,V.height);var g=ctx.createLinearGradient(0,0,0,V.height);g.addColorStop(0,'#17171c');g.addColorStop(1,'#08090c');ctx.fillStyle=g;ctx.fillRect(0,0,V.width,V.height);
  ctx.fillStyle='#4b3b25';ctx.fillRect(0,V.height*.68,V.width,V.height*.32);ctx.fillStyle='#cfb57c';ctx.font='800 38px Georgia';ctx.textAlign='center';ctx.fillText('THE GUILD HALL',V.width/2,V.height*.33);ctx.fillStyle='#9a927f';ctx.font='16px monospace';ctx.fillText(p.name+' は次の単独遠征を準備中',V.width/2,V.height*.43);
@@ -324,7 +364,7 @@ function updateUI(){
  document.getElementById('feed').innerHTML=logs.map(function(e){return'<div class="ev"><small>T'+e.t+(e.p?' / '+e.p:'')+'</small>'+e.s+'</div>'}).join('');
 }
 function draw(){var p=players[focus]||players[0];if(p.state==='town')drawTown(p);else drawDungeon(p);drawMini(p)}
-function frame(now){var dt=Math.min(.08,(now-last)/1000);last=now;if(!paused){acc+=dt*rate*speed;while(acc>=1){sim();acc--}}draw();requestAnimationFrame(frame)}
+function frame(now){visualNow=now;var dt=Math.min(.08,(now-last)/1000);last=now;if(!paused){acc+=dt*rate*speed;while(acc>=1){sim();acc--}}draw();requestAnimationFrame(frame)}
 document.getElementById('pause').addEventListener('click',function(){paused=!paused;this.textContent=paused?'RESUME':'PAUSE'});
 document.getElementById('new').addEventListener('click',init);
 Array.prototype.forEach.call(document.querySelectorAll('.sp'),function(b){b.addEventListener('click',function(){speed=Number(this.getAttribute('data-s'));Array.prototype.forEach.call(document.querySelectorAll('.sp'),function(q){q.classList.toggle('on',q===b)})})});
