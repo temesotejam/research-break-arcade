@@ -16,7 +16,7 @@ button.on{background:#3b3020;border-color:#c8aa68}.layout{display:grid;grid-temp
 .badges{display:flex;gap:6px;flex-wrap:wrap}.badge{font-size:11px;border:1px solid #484336;background:#191b21;padding:5px 8px;border-radius:999px;color:#d8cfb7}
 .view{position:relative;background:#020304}.view canvas{display:block;width:100%;height:auto;aspect-ratio:16/10}.caption{padding:8px 12px;border-top:1px solid #302f29;color:#7c786d;font-size:11px}
 .sec{padding:11px 12px;border-bottom:1px solid #292a25}.sec h2{font-size:10px;letter-spacing:.13em;color:#c2b79c;margin:0 0 8px}.mode{font:800 20px Georgia,serif;margin-bottom:3px}.sub{font:12px/1.45 system-ui,sans-serif;color:#88867d}
-.players{display:grid;gap:3px}.player{display:grid;grid-template-columns:10px 1fr auto;gap:7px;align-items:center;padding:6px 0;border-bottom:1px solid #23241f}.player:last-child{border:0}
+.players{display:grid;gap:3px}.player{display:grid;grid-template-columns:10px 1fr auto auto;gap:7px;align-items:center;padding:7px 6px;border-bottom:1px solid #23241f;border-radius:6px}.player:last-child{border:0}.player.selected{background:#1d1a14;box-shadow:inset 0 0 0 1px #8b7447}.viewbtn{min-height:28px;padding:4px 7px;font-size:9px;border-radius:5px}.viewbtn.on{background:#6a5630;border-color:#d1b46f;color:#fff3cf}
 .dot{width:8px;height:8px;border-radius:50%}.nm{font-size:12px;font-weight:850}.meta{font-size:9px;color:#75756e;margin-top:2px}.hp{font-size:10px;text-align:right}.dead{color:#bc7070}
 .meter{height:3px;background:#292923;margin-top:3px}.meter i{height:100%;display:block}.town{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.st{border:1px solid #302f29;background:#15171d;border-radius:6px;padding:7px}.st span{display:block;color:#727168;font-size:9px}.st b{font-size:14px}
 .mapbox{display:flex;gap:10px;align-items:flex-start}.mapbox canvas{width:150px;height:150px;image-rendering:pixelated;border:1px solid #2f2f2a;background:#07090c}.maptext{font:10px/1.5 system-ui,sans-serif;color:#77756d}
@@ -36,7 +36,7 @@ button.on{background:#3b3020;border-color:#c8aa68}.layout{display:grid;grid-temp
 <section class="card">
   <div class="head"><div class="badges"><span class="badge" id="floor">B1F</span><span class="badge" id="follow">FOLLOW --</span><span class="badge" id="state">TOWN</span><span class="badge" id="dir">NORTH</span></div><span class="badge" id="headline">ギルド結成中…</span></div>
   <div class="view"><canvas id="view" width="960" height="600" aria-label="一人称ダンジョン探索"></canvas></div>
-  <div class="caption">カメラは冒険者を自動追跡。各冒険者は独立した位置・向き・記憶地図・目的を持ちます。角では約0.4秒かけて滑らかに旋回し、その次の行動で1マス前進します。</div>
+  <div class="caption">右側の VIEW で見る冒険者を選択。選んだ視点は固定され、戦闘や死亡が起きても勝手には切り替わりません。角では約0.4秒かけて滑らかに旋回します。</div>
 </section>
 <aside class="card">
   <div class="sec"><h2>FOLLOWED DELVER</h2><div class="mode" id="mode">街で準備中</div><div class="sub" id="decision">複数の冒険者が別々に準備しています。</div></div>
@@ -190,7 +190,7 @@ function startBattle(p){
  var count=1+(Math.random()<Math.min(.62,.08+p.floor*.065)?1:0)+(Math.random()<Math.min(.34,p.floor*.028)?1:0);
  var name=(count>1?count+'× ':'')+base,hp=(15+p.floor*8+irnd(11))*count;
  p.battle={name:name,hp:hp,maxHp:hp,atk:5+p.floor*2+Math.max(0,count-1)*3,def:2+p.floor,round:0,count:count};
- p.state='battle';p.decision=name+' と交戦';focus=p.id;focusAge=0;addLog(p.name+' が '+name+' と遭遇。',p);
+ p.state='battle';p.decision=name+' と交戦';addLog(p.name+' が '+name+' と遭遇。',p);
 }
 function battleStep(p){
  var b=p.battle;if(!b){p.state='explore';return}
@@ -203,11 +203,11 @@ function battleStep(p){
  var hit=Math.max(1,b.atk+irnd(7)-p.def-allies.length);p.hp-=hit;
  if(p.hp<=0)downPlayer(p,b.name);
 }
-function downPlayer(p,cause){p.hp=0;p.state='down';p.down=70+p.floor*5;p.battle=null;p.route=[];p.decision='救助待ち';deaths++;focus=p.id;focusAge=0;addLog(p.name+' が '+cause+' に倒れた。',p)}
+function downPlayer(p,cause){p.hp=0;p.state='down';p.down=70+p.floor*5;p.battle=null;p.route=[];p.decision='救助待ち';deaths++;addLog(p.name+' が '+cause+' に倒れた。',p)}
 function downStep(p){p.down--;if(p.down<=0){p.gold=Math.floor(p.gold*.65);p.loot=0;p.state='town';p.town=10;p.floor=0;p.hp=1;addLog(p.name+' は救助隊に回収された。',p)}}
 function rescueHere(p){
  var q=players.find(function(o){return o!==p&&o.state==='down'&&o.floor===p.floor&&o.x===p.x&&o.y===p.y});
- if(q){q.state='return';q.hp=Math.ceil(q.maxHp*.28);q.down=0;q.route=[];q.target=[1,1];p.potions=Math.max(0,p.potions-1);addLog(p.name+' が '+q.name+' を救助した。',p);focus=q.id;focusAge=0}
+ if(q){q.state='return';q.hp=Math.ceil(q.maxHp*.28);q.down=0;q.route=[];q.target=[1,1];p.potions=Math.max(0,p.potions-1);addLog(p.name+' が '+q.name+' を救助した。',p)}
 }
 function meetHere(p){
  players.forEach(function(o){if(o===p||o.state==='town'||o.state==='down'||o.floor!==p.floor||o.x!==p.x||o.y!==p.y)return;if(tick-Math.max(p.lastMeet,o.lastMeet)<12)return;
@@ -220,7 +220,6 @@ function playerStep(p){
 }
 function sim(){
  tick++;for(var i=0;i<players.length;i++)playerStep(players[i]);
- focusAge++;if(focusAge>18){focusAge=0;var candidates=players.filter(function(p){return p.state!=='town'});if(candidates.length){var cur=candidates.findIndex(function(p){return p.id===focus});focus=candidates[(cur+1+candidates.length)%candidates.length].id}}
  updateUI();
 }
 function relCell(p,depth,side){
@@ -359,12 +358,17 @@ function drawMini(p){
 function updateUI(){
  var p=players[focus]||players[0];document.getElementById('follow').textContent='FOLLOW '+p.name;document.getElementById('floor').textContent=p.floor?'B'+p.floor+'F':'TOWN';document.getElementById('state').textContent=p.state.toUpperCase();document.getElementById('dir').textContent=p.floor?DN[p.dir]:'--';
  document.getElementById('mode').textContent=p.state==='town'?'街で準備中':p.state==='battle'?'戦闘中':p.state==='down'?'救助待ち':p.state==='return'?'撤退中':'単独探索中';document.getElementById('decision').textContent=p.decision;
- document.getElementById('players').innerHTML=players.map(function(o){var hr=clamp(o.hp/o.maxHp,0,1);return'<div class="player"><i class="dot" style="background:'+o.color+'"></i><div><div class="nm">'+o.name+' <span class="meta">'+o.trait+'</span></div><div class="meta">'+(o.floor?'B'+o.floor+'F '+DN[o.dir]:'TOWN')+' · LV'+o.lv+' · '+o.state+'</div><div class="meter"><i style="width:'+Math.round(hr*100)+'%;background:'+o.color+'"></i></div></div><div class="hp '+(o.state==='down'?'dead':'')+'">'+Math.max(0,o.hp)+'/'+o.maxHp+'<br>'+o.gold+'G</div></div>'}).join('');
+ document.getElementById('players').innerHTML=players.map(function(o){var hr=clamp(o.hp/o.maxHp,0,1);return'<div class="player '+(o.id===focus?'selected':'')+'"><i class="dot" style="background:'+o.color+'"></i><div><div class="nm">'+o.name+' <span class="meta">'+o.trait+'</span></div><div class="meta">'+(o.floor?'B'+o.floor+'F '+DN[o.dir]:'TOWN')+' · LV'+o.lv+' · '+o.state+'</div><div class="meter"><i style="width:'+Math.round(hr*100)+'%;background:'+o.color+'"></i></div></div><div class="hp '+(o.state==='down'?'dead':'')+'">'+Math.max(0,o.hp)+'/'+o.maxHp+'<br>'+o.gold+'G</div><button class="viewbtn '+(o.id===focus?'on':'')+'" data-view="'+o.id+'">'+(o.id===focus?'VIEWING':'VIEW')+'</button></div>'}).join('');
  document.getElementById('deepest').textContent='B'+deepest+'F';document.getElementById('gold').textContent=players.reduce(function(a,o){return a+o.gold},0);document.getElementById('relics').textContent=relics;document.getElementById('runs').textContent=returns;document.getElementById('deaths').textContent=deaths;document.getElementById('meetings').textContent=meetings;
  document.getElementById('feed').innerHTML=logs.map(function(e){return'<div class="ev"><small>T'+e.t+(e.p?' / '+e.p:'')+'</small>'+e.s+'</div>'}).join('');
 }
 function draw(){var p=players[focus]||players[0];if(p.state==='town')drawTown(p);else drawDungeon(p);drawMini(p)}
 function frame(now){visualNow=now;var dt=Math.min(.08,(now-last)/1000);last=now;if(!paused){acc+=dt*rate*speed;while(acc>=1){sim();acc--}}draw();requestAnimationFrame(frame)}
+document.getElementById('players').addEventListener('click',function(e){
+ var b=e.target.closest('button[data-view]');if(!b)return;
+ var id=Number(b.getAttribute('data-view'));
+ if(id>=0&&id<players.length){focus=id;updateUI();draw()}
+});
 document.getElementById('pause').addEventListener('click',function(){paused=!paused;this.textContent=paused?'RESUME':'PAUSE'});
 document.getElementById('new').addEventListener('click',init);
 Array.prototype.forEach.call(document.querySelectorAll('.sp'),function(b){b.addEventListener('click',function(){speed=Number(this.getAttribute('data-s'));Array.prototype.forEach.call(document.querySelectorAll('.sp'),function(q){q.classList.toggle('on',q===b)})})});
