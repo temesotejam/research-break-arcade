@@ -14,7 +14,7 @@ button{min-height:42px;border:1px solid #50493a;background:#17191f;color:#eee8d6
 button.on{background:#3b3020;border-color:#c8aa68}.layout{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:12px}
 .card{border:1px solid #39372f;background:#101218;border-radius:12px;overflow:hidden}.head{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid #302f29}
 .badges{display:flex;gap:6px;flex-wrap:wrap}.badge{font-size:11px;border:1px solid #484336;background:#191b21;padding:5px 8px;border-radius:999px;color:#d8cfb7}
-.view{position:relative;background:#05070a}.view canvas{display:block;width:100%;height:auto;aspect-ratio:16/10}.caption{padding:8px 12px;border-top:1px solid #302f29;color:#7c786d;font-size:11px}
+.view{position:relative;background:#020304}.view canvas{display:block;width:100%;height:auto;aspect-ratio:16/10}.caption{padding:8px 12px;border-top:1px solid #302f29;color:#7c786d;font-size:11px}
 .sec{padding:11px 12px;border-bottom:1px solid #292a25}.sec h2{font-size:10px;letter-spacing:.13em;color:#c2b79c;margin:0 0 8px}.mode{font:800 20px Georgia,serif;margin-bottom:3px}.sub{font:12px/1.45 system-ui,sans-serif;color:#88867d}
 .players{display:grid;gap:3px}.player{display:grid;grid-template-columns:10px 1fr auto;gap:7px;align-items:center;padding:6px 0;border-bottom:1px solid #23241f}.player:last-child{border:0}
 .dot{width:8px;height:8px;border-radius:50%}.nm{font-size:12px;font-weight:850}.meta{font-size:9px;color:#75756e;margin-top:2px}.hp{font-size:10px;text-align:right}.dead{color:#bc7070}
@@ -174,6 +174,15 @@ function returnToTown(p){
  returns++;p.state='town';p.town=irnd(8,4);p.gold+=p.loot*(12+p.floor*2);if(p.loot)addLog(p.name+' が戦利品を持って帰還。',p);p.loot=0;p.floor=0;p.route=[];p.target=null;p.battle=null;
 }
 function handleCell(p){
+ 
+ // 通路床の中央ガイド
+ ctx.strokeStyle='rgba(238,220,174,.55)';ctx.lineWidth=3;
+ ctx.beginPath();ctx.moveTo(cx,h*.96);ctx.lineTo(cx,h*.55);ctx.stroke();
+ for(var gd=0;gd<4;gd++){
+   var ga=L[gd],gb=L[gd+1];
+   ctx.strokeStyle='rgba(245,229,189,'+(0.18+gd*.05)+')';ctx.lineWidth=2;
+   ctx.beginPath();ctx.moveTo(ga.l,ga.b);ctx.lineTo(ga.r,ga.b);ctx.stroke();
+ }
  var fd=floorData(p.floor),ii=key(p.x,p.y),e=fd.events[ii];
  if(e===1){fd.events[ii]=0;var g=irnd(28+p.floor*13,8);p.gold+=g;p.loot+=irnd(4,1);p.decision='宝箱を開けた';addLog(p.name+' が宝箱から '+g+'G を得た。',p)}
  else if(e===2){fd.events[ii]=0;if(Math.random()<.72){p.hp=Math.min(p.maxHp,p.hp+Math.ceil(p.maxHp*.4));p.decision='泉で傷を癒す';addLog(p.name+' が泉で回復。',p)}else{p.hp-=irnd(10+p.floor,3);addLog(p.name+' が毒の泉で傷ついた。',p);if(p.hp<=0)downPlayer(p,'毒')}}
@@ -228,16 +237,16 @@ function wall(p,depth,side,which){
 function poly(a,fill,stroke){ctx.beginPath();ctx.moveTo(a[0][0],a[0][1]);for(var i=1;i<a.length;i++)ctx.lineTo(a[i][0],a[i][1]);ctx.closePath();ctx.fillStyle=fill;ctx.fill();if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.stroke()}}
 function drawDungeon(p){
  var w=V.width,h=V.height,cx=w/2,cy=h*.52;
- ctx.fillStyle='#05070a';ctx.fillRect(0,0,w,h);
- var bg=ctx.createLinearGradient(0,0,0,h);bg.addColorStop(0,'#080b0f');bg.addColorStop(.5,'#19160f');bg.addColorStop(1,'#07080a');ctx.fillStyle=bg;ctx.fillRect(0,0,w,h);
+ ctx.fillStyle='#020304';ctx.fillRect(0,0,w,h);
+ var bg=ctx.createLinearGradient(0,0,0,h);bg.addColorStop(0,'#050608');bg.addColorStop(.48,'#12100c');bg.addColorStop(1,'#090806');ctx.fillStyle=bg;ctx.fillRect(0,0,w,h);
  var L=[];for(var d=0;d<=5;d++){var s=1/(1+d*.62),hw=w*.47*s,hh=h*.43*s;L.push({l:cx-hw,r:cx+hw,t:cy-hh,b:cy+hh})}
  for(var depth=4;depth>=0;depth--){
    var a=L[depth],b=L[depth+1],shade=38+depth*4;
-   poly([[a.l,a.t],[b.l,b.t],[b.l,b.b],[a.l,a.b]],wall(p,depth,0,'left')?'rgb('+shade+','+(shade-3)+','+(shade-8)+')':'#0b0c0f','#534b38');
-   poly([[b.r,b.t],[a.r,a.t],[a.r,a.b],[b.r,b.b]],wall(p,depth,0,'right')?'rgb('+shade+','+(shade-3)+','+(shade-8)+')':'#0b0c0f','#534b38');
-   poly([[a.l,a.t],[a.r,a.t],[b.r,b.t],[b.l,b.t]],'#15140f','#332f24');
-   poly([[b.l,b.b],[b.r,b.b],[a.r,a.b],[a.l,a.b]],'#11110f','#332f24');
-   if(wall(p,depth,0,'front')){poly([[b.l,b.t],[b.r,b.t],[b.r,b.b],[b.l,b.b]],'rgb('+(48+depth*3)+','+(44+depth*2)+','+(34+depth)+')','#645940')}
+   poly([[a.l,a.t],[b.l,b.t],[b.l,b.b],[a.l,a.b]],wall(p,depth,0,'left')?'rgb('+(shade-12)+','+(shade-15)+','+(shade-18)+')':'#050608','#8d7b56');
+   poly([[b.r,b.t],[a.r,a.t],[a.r,a.b],[b.r,b.b]],wall(p,depth,0,'right')?'rgb('+(shade-12)+','+(shade-15)+','+(shade-18)+')':'#050608','#8d7b56');
+   poly([[a.l,a.t],[a.r,a.t],[b.r,b.t],[b.l,b.t]],'#12110e','#4f4634');
+   poly([[b.l,b.b],[b.r,b.b],[a.r,a.b],[a.l,a.b]],'#7f765f','#b7a783');
+   if(wall(p,depth,0,'front')){poly([[b.l,b.t],[b.r,b.t],[b.r,b.b],[b.l,b.b]],'rgb('+(60+depth*3)+','+(38+depth*2)+','+(30+depth)+')','#b39768')}
  }
  var fd=floorData(p.floor),ii=key(p.x,p.y),e=fd.events[ii];
  if(e){ctx.textAlign='center';ctx.font='700 54px Georgia';ctx.fillStyle=e===1?'#d7b66b':e===2?'#7bc7d4':e===3?'#d47474':'#d8d5c9';ctx.fillText(e===1?'□':e===2?'✦':e===3?'!':'◇',cx,h*.66)}
@@ -254,7 +263,7 @@ function drawTown(p){
 }
 function drawMini(p){
  mx.fillStyle='#07090c';mx.fillRect(0,0,M.width,M.height);if(p.floor<1)return;var fd=floorData(p.floor),seen=seenFor(p,p.floor),cw=M.width/W,ch=M.height/H;
- for(var y=0;y<H;y++)for(var x=0;x<W;x++){var ii=key(x,y);if(!seen[ii])continue;mx.fillStyle=fd.grid[ii]?'#242722':'#0b0c0e';mx.fillRect(x*cw,y*ch,cw+.3,ch+.3);if(fd.events[ii]){mx.fillStyle=fd.events[ii]===4?'#ddd4ba':fd.events[ii]===1?'#b89b58':fd.events[ii]===2?'#6baeb9':'#a56262';mx.fillRect(x*cw+cw*.32,y*ch+ch*.32,cw*.36,ch*.36)}}
+ for(var y=0;y<H;y++)for(var x=0;x<W;x++){var ii=key(x,y);if(!seen[ii])continue;mx.fillStyle=fd.grid[ii]?'#d0c6aa':'#030405';mx.fillRect(x*cw,y*ch,cw+.3,ch+.3);if(fd.events[ii]){mx.fillStyle=fd.events[ii]===4?'#ddd4ba':fd.events[ii]===1?'#b89b58':fd.events[ii]===2?'#6baeb9':'#a56262';mx.fillRect(x*cw+cw*.32,y*ch+ch*.32,cw*.36,ch*.36)}}
  players.forEach(function(o){if(o.state==='town'||o.floor!==p.floor)return;mx.fillStyle=o.state==='down'?'#777':o.color;mx.beginPath();mx.arc((o.x+.5)*cw,(o.y+.5)*ch,Math.max(2,cw*.34),0,7);mx.fill()})
 }
 function updateUI(){
