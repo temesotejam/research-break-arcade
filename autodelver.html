@@ -44,7 +44,7 @@ button.on{background:#3b3020;border-color:#c8aa68}.layout{display:grid;grid-temp
   <div class="sec"><h2>MEMORY MAP / FOLLOWED FLOOR</h2><div class="mapbox"><canvas id="mini" width="150" height="150"></canvas><div class="maptext">色点 = 冒険者<br>◇ = 下り階段<br>□ = 宝箱<br>✦ = 泉<br>× = 倒れた冒険者<br>⌂ = 地下休息所<br><br>地図は出会った冒険者同士で共有。</div></div></div>
   <div class="sec"><h2>GUILD RECORD</h2><div class="town"><div class="st"><span>DEEPEST</span><b id="deepest">B1F</b></div><div class="st"><span>TOTAL GOLD</span><b id="gold">0</b></div><div class="st"><span>RELICS</span><b id="relics">0</b></div><div class="st"><span>RETURNS</span><b id="runs">0</b></div><div class="st"><span>DEATHS</span><b id="deaths">0</b></div><div class="st"><span>MEETINGS</span><b id="meetings">0</b></div><div class="st"><span>SAFE STASH</span><b id="stash">0</b></div></div></div>
   <div class="sec"><h2>CHRONICLE</h2></div><div id="feed" class="feed"></div>
-  <div class="note">性格: 地図師 / 財宝狙い / 深層狙い / 慎重派 / 狩人。B3F・B6F・B9F・B12Fの入口には安全な地下休息所があり、消耗時は街より先にそこを目指します。</div>
+  <div class="note">性格: 地図師 / 財宝狙い / 深層狙い / 慎重派 / 狩人。B3F・B6F・B9F・B12Fの下り階段近くには安全な地下休息所があり、消耗時は街より先にそこを目指します。</div>
 </aside>
 </div>
 </main>
@@ -75,7 +75,7 @@ function inside(x,y){return x>=0&&y>=0&&x<W&&y<H}
 function shuffle(a){for(var i=a.length-1;i>0;i--){var j=irnd(i+1),t=a[i];a[i]=a[j];a[j]=t}return a}
 function isRestFloor(f){return f>0&&f%3===0&&f<=12}
 function nearestRestFloor(f){return f>=3?Math.floor(f/3)*3:0}
-function isRestSite(p){return isRestFloor(p.floor)&&p.x===1&&p.y===1}
+function isRestSite(p){if(!isRestFloor(p.floor))return false;var fd=floorData(p.floor);return fd.rest>=0&&key(p.x,p.y)===fd.rest}
 function addLog(s,p){logs.unshift({s:s,t:tick,p:p?p.name:''});logs=logs.slice(0,36);document.getElementById('headline').textContent=s.length>40?s.slice(0,39)+'…':s}
 function makeFloor(f){
  var grid=new Uint8Array(W*H),events=new Uint8Array(W*H);
@@ -88,13 +88,18 @@ function makeFloor(f){
    var q=opts[irnd(opts.length)],mx0=c[0]+DIRS[q[2]][0],my0=c[1]+DIRS[q[2]][1];
    grid[key(mx0,my0)]=1;grid[key(q[0],q[1])]=1;vis.add(q[0]+','+q[1]);st.push([q[0],q[1]]);
  }
- var far=farthest(grid,1,1),stairs=key(far[0],far[1]);events[stairs]=4;if(isRestFloor(f))events[key(1,1)]=5;
- var cells=[];for(y=1;y<H-1;y++)for(x=1;x<W-1;x++)if(grid[key(x,y)]&&key(x,y)!==key(1,1)&&key(x,y)!==stairs)cells.push(key(x,y));
+ var far=farthest(grid,1,1),stairs=key(far[0],far[1]),rest=-1;events[stairs]=4;
+ if(isRestFloor(f)){
+   for(var rd=0;rd<4;rd++){var rx=far[0]+DIRS[rd][0],ry=far[1]+DIRS[rd][1],ri=inside(rx,ry)?key(rx,ry):-1;if(ri>=0&&grid[ri]){rest=ri;break}}
+   if(rest<0)rest=key(1,1);
+   if(rest!==stairs)events[rest]=5;
+ }
+ var cells=[];for(y=1;y<H-1;y++)for(x=1;x<W-1;x++)if(grid[key(x,y)]&&key(x,y)!==key(1,1)&&key(x,y)!==stairs&&key(x,y)!==rest)cells.push(key(x,y));
  shuffle(cells);var i;
  for(i=0;i<Math.min(7,cells.length);i++)events[cells[i]]=1;
  for(i=7;i<Math.min(11,cells.length);i++)events[cells[i]]=2;
  for(i=11;i<Math.min(15,cells.length);i++)events[cells[i]]=3;
- return{grid:grid,events:events,stairs:stairs};
+ return{grid:grid,events:events,stairs:stairs,rest:rest};
 }
 function farthest(grid,sx,sy){
  var q=[[sx,sy]],dist=new Int16Array(W*H),b=[sx,sy];dist.fill(-1);dist[key(sx,sy)]=0;
@@ -144,6 +149,14 @@ function bfs(p,tx,ty,seenOnly){
 }
 function chooseTarget(p){
  var fd=floorData(p.floor),seen=seenFor(p,p.floor),i,best=null,bestScore=-1e9;
+ if(p.state==='restReturn'&&p.restTarget){
+   if(p.floor>p.restTarget){p.decision='地下休息所 B'+p.restTarget+'F へ戻る';return[1,1]}
+   if(p.floor===p.restTarget){
+     var ri=fd.rest;
+     if(isRestSite(p)){beginRest(p);return[p.x,p.y]}
+     p.decision='地下休息所へ向かう';return[ri%W,(ri/W)|0]
+   }
+ }
  var fallen=players.filter(function(o){return o!==p&&o.state==='down'&&o.floor===p.floor});
  if(fallen.length&&p.state==='explore'){
    fallen.sort(function(a,b){return Math.abs(a.x-p.x)+Math.abs(a.y-p.y)-Math.abs(b.x-p.x)-Math.abs(b.y-p.y)});
@@ -151,9 +164,13 @@ function chooseTarget(p){
    if(fdist<=10||seen[key(f.x,f.y)]){p.decision=f.name+' の救助へ向かう';return[f.x,f.y]}
  }
  if(shouldUseRefuge(p)){
-   p.restTarget=nearestRestFloor(p.floor);
-   if(p.floor===p.restTarget&&p.x===1&&p.y===1){beginRest(p);return[1,1]}
-   p.decision='地下休息所 B'+p.restTarget+'F へ避難';p.state='restReturn';return[1,1]
+   p.restTarget=nearestRestFloor(p.floor);p.state='restReturn';
+   if(p.floor===p.restTarget){
+     var rr=floorData(p.floor).rest;
+     if(isRestSite(p)){beginRest(p);return[p.x,p.y]}
+     p.decision='地下休息所へ避難';return[rr%W,(rr/W)|0]
+   }
+   p.decision='地下休息所 B'+p.restTarget+'F へ避難';return[1,1]
  }
  if(shouldReturn(p)){p.decision='消耗が大きい。街へ戻る';p.state='return';return[1,1]}
  if(seen[fd.stairs]&&Math.random()<p.depthDrive&&explored(p)>.22+(1-p.depthDrive)*.38){p.decision='階段を見つけた。深層へ進む';return[fd.stairs%W,(fd.stairs/W)|0]}
@@ -189,13 +206,13 @@ function exploreStep(p){
  reveal(p);rescueHere(p);meetHere(p);
  if(p.state!=='explore'&&p.state!=='return'&&p.state!=='restReturn')return;
  if(!p.route.length){
-   p.target=chooseTarget(p);p.route=bfs(p,p.target[0],p.target[1],true);
+   p.target=chooseTarget(p);if(p.state==='resting')return;p.route=bfs(p,p.target[0],p.target[1],true);
    if(!p.route.length)p.route=bfs(p,p.target[0],p.target[1],false);
    if(!p.route.length){var from0=p.dir,sg0=Math.random()<.5?1:-1;p.dir=(p.dir+(sg0>0?1:3))%4;startTurnAnim(p,from0,p.dir,sg0);p.turn=1;p.decision=sg0>0?'右へ旋回':'左へ旋回';return}
  }
  var n=p.route[0],want=desiredDir(p,n[0],n[1]);
  if(p.dir!==want){var delta=(want-p.dir+4)%4,fromDir=p.dir,turnSign=delta===3?-1:1;p.dir=turnSign<0?(p.dir+3)%4:(p.dir+1)%4;startTurnAnim(p,fromDir,p.dir,turnSign);p.turn=1;p.decision=turnSign<0?'左へ旋回':'右へ旋回';return}
- var oldX=p.x,oldY=p.y;p.x=n[0];p.y=n[1];p.route.shift();p.move=1;startMoveAnim(p,oldX,oldY,p.x,p.y,p.dir);reveal(p);p.decision='1マス前進';rescueHere(p);meetHere(p);
+ var oldX=p.x,oldY=p.y;p.x=n[0];p.y=n[1];p.route.shift();p.move=1;startMoveAnim(p,oldX,oldY,p.x,p.y,p.dir);reveal(p);p.decision='1マス前進';rescueHere(p);meetHere(p);if(p.state==='restReturn'&&p.floor===p.restTarget&&isRestSite(p)){beginRest(p);return}
  if(!isRestSite(p)&&Math.random()<(.075+p.floor*.011)*p.encourage&&p.state==='explore'){startBattle(p);return}
  handleCell(p);
  if((p.state==='return'||p.state==='restReturn')&&p.x===1&&p.y===1)ascendOrTown(p);
@@ -219,7 +236,7 @@ function handleCell(p){
  else if(e===2){fd.events[ii]=0;if(Math.random()<.72){p.hp=Math.min(p.maxHp,p.hp+Math.ceil(p.maxHp*.4));p.decision='泉で傷を癒す';addLog(p.name+' が泉で回復。',p)}else{p.hp-=irnd(10+p.floor,3);addLog(p.name+' が毒の泉で傷ついた。',p);if(p.hp<=0)downPlayer(p,'毒')}}
  else if(e===3){fd.events[ii]=0;if(Math.random()<.55){var d=irnd(11+p.floor*2,4);p.hp-=d;addLog(p.name+' が罠で '+d+' ダメージ。',p);if(p.hp<=0)downPlayer(p,'罠')}else{p.gold+=15;p.decision='罠を見破った'}}
  else if(e===5&&p.state==='explore'&&(hpRatio(p)<.74||p.potions<1)){beginRest(p)}
- else if(e===4&&p.state==='explore'){p.floor++;p.maxFloor=Math.max(p.maxFloor,p.floor);deepest=Math.max(deepest,p.floor);p.x=1;p.y=1;p.dir=irnd(4);p.route=[];p.target=null;p.turnAnim=null;p.moveAnim=null;reveal(p);p.decision='さらに深い階へ降りる';addLog(p.name+' が単独で B'+p.floor+'F へ。',p);if(isRestFloor(p.floor)&&(hpRatio(p)<.78||p.potions===0)){beginRest(p);return}if(p.floor>12){p.floor=1;p.maxFloor=Math.max(p.maxFloor,3);p.gold+=600;relics++;addLog(p.name+' が深層遺物を持ち帰った！',p);returnToTown(p)}}
+ else if(e===4&&p.state==='explore'){p.floor++;p.maxFloor=Math.max(p.maxFloor,p.floor);deepest=Math.max(deepest,p.floor);p.x=1;p.y=1;p.dir=irnd(4);p.route=[];p.target=null;p.turnAnim=null;p.moveAnim=null;reveal(p);p.decision='さらに深い階へ降りる';addLog(p.name+' が単独で B'+p.floor+'F へ。',p);if(isRestFloor(p.floor)&&(hpRatio(p)<.78||p.potions===0)){p.state='restReturn';p.restTarget=p.floor;p.route=[];p.target=null;p.decision='この階の地下休息所へ向かう';return}if(p.floor>12){p.floor=1;p.maxFloor=Math.max(p.maxFloor,3);p.gold+=600;relics++;addLog(p.name+' が深層遺物を持ち帰った！',p);returnToTown(p)}}
 }
 function startBattle(p){
  var tier=Math.min(3,Math.floor((p.floor-1)/3)),base=EN[tier][irnd(EN[tier].length)];
