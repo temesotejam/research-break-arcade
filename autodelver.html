@@ -214,8 +214,9 @@ function exploreStep(p){
  if(p.dir!==want){var delta=(want-p.dir+4)%4,fromDir=p.dir,turnSign=delta===3?-1:1;p.dir=turnSign<0?(p.dir+3)%4:(p.dir+1)%4;startTurnAnim(p,fromDir,p.dir,turnSign);p.turn=1;p.decision=turnSign<0?'左へ旋回':'右へ旋回';return}
  var oldX=p.x,oldY=p.y;p.x=n[0];p.y=n[1];p.route.shift();p.move=1;startMoveAnim(p,oldX,oldY,p.x,p.y,p.dir);reveal(p);p.decision='1マス前進';rescueHere(p);meetHere(p);if(p.state==='restReturn'&&p.floor===p.restTarget&&isRestSite(p)){beginRest(p);return}
  if(!isRestSite(p)&&Math.random()<(.075+p.floor*.011)*p.encourage&&p.state==='explore'){startBattle(p);return}
+ var floorBeforeCell=p.floor;
  handleCell(p);
- if((p.state==='return'||p.state==='restReturn')&&p.x===1&&p.y===1)ascendOrTown(p);
+ if(p.floor===floorBeforeCell&&(p.state==='return'||p.state==='restReturn')&&p.x===1&&p.y===1)ascendOrTown(p);
 }
 function ascendOrTown(p){
  if(p.state==='restReturn'&&p.floor===p.restTarget&&isRestSite(p)){beginRest(p);return}
