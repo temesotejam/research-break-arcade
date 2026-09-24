@@ -36,7 +36,7 @@ button.on{background:#3b3020;border-color:#c8aa68}.layout{display:grid;grid-temp
 <section class="card">
   <div class="head"><div class="badges"><span class="badge" id="floor">B1F</span><span class="badge" id="follow">FOLLOW --</span><span class="badge" id="state">TOWN</span><span class="badge" id="dir">NORTH</span></div><span class="badge" id="headline">ギルド結成中…</span></div>
   <div class="view"><canvas id="view" width="960" height="600" aria-label="一人称ダンジョン探索"></canvas></div>
-  <div class="caption">右側の VIEW で見る冒険者を選択。選んだ視点は固定され、戦闘や死亡が起きても勝手には切り替わりません。角では約0.4秒かけて滑らかに旋回します。</div>
+  <div class="caption">右側の VIEW で見る冒険者を選択。選んだ視点は固定され、戦闘や死亡が起きても勝手には切り替わりません。旋回だけでなく1マス前進も約0.4秒かけて補間し、壁と床が連続的に流れるように表示します。</div>
 </section>
 <aside class="card">
   <div class="sec"><h2>FOLLOWED DELVER</h2><div class="mode" id="mode">街で準備中</div><div class="sub" id="decision">複数の冒険者が別々に準備しています。</div></div>
@@ -101,7 +101,7 @@ function farthest(grid,sx,sy){
 function floorData(f){if(!floors[f])floors[f]=makeFloor(f);return floors[f]}
 function freshPlayer(i){
  var t=TRAITS[i],p={id:i,name:NAMES[i],color:COLORS[i],trait:t.name,risk:t.risk,greed:t.greed,depthDrive:t.depth,retreatAt:t.retreat,encourage:t.enc,
- x:1,y:1,dir:i%4,floor:1,seen:{},route:[],target:null,state:'town',decision:'準備中',hp:42,maxHp:42,mp:8,maxMp:8,atk:10+i,def:5+(i===3?2:0),lv:1,xp:0,gold:80,loot:0,potions:2,battle:null,town:irnd(7,2),down:0,lastMeet:-99,maxFloor:1,kills:0,turn:0,move:0,turnAnim:null};
+ x:1,y:1,dir:i%4,floor:1,seen:{},route:[],target:null,state:'town',decision:'準備中',hp:42,maxHp:42,mp:8,maxMp:8,atk:10+i,def:5+(i===3?2:0),lv:1,xp:0,gold:80,loot:0,potions:2,battle:null,town:irnd(7,2),down:0,lastMeet:-99,maxFloor:1,kills:0,turn:0,move:0,turnAnim:null,moveAnim:null};
  p.seen[1]=new Uint8Array(W*H);return p;
 }
 function init(){
@@ -142,10 +142,15 @@ function chooseTarget(p){
 function explored(p){var fd=floorData(p.floor),s=seenFor(p,p.floor),a=0,b=0;for(var i=0;i<s.length;i++)if(fd.grid[i]){b++;if(s[i])a++}return b?a/b:0}
 function desiredDir(p,nx,ny){var dx=nx-p.x,dy=ny-p.y;if(dx===1)return 1;if(dx===-1)return 3;if(dy===1)return 2;return 0}
 function startTurnAnim(p,from,to,sign){
- p.turnAnim={from:from,to:to,sign:sign,start:performance.now(),duration:Math.max(150,390/Math.sqrt(speed||1))};
+ p.moveAnim=null;
+ p.turnAnim={from:from,to:to,sign:sign,start:performance.now(),duration:Math.max(170,410/Math.sqrt(speed||1))};
+}
+function startMoveAnim(p,fromX,fromY,toX,toY,dir){
+ p.turnAnim=null;
+ p.moveAnim={fromX:fromX,fromY:fromY,toX:toX,toY:toY,dir:dir,floor:p.floor,start:performance.now(),duration:Math.max(180,430/Math.sqrt(speed||1))};
 }
 function enterDungeon(p){
- p.floor=Math.max(1,Math.min(p.maxFloor,1+Math.floor((p.lv-1)/3)));p.x=1;p.y=1;p.dir=irnd(4);p.route=[];p.target=null;p.state='explore';p.battle=null;reveal(p);p.decision='独立探索を開始';
+ p.floor=Math.max(1,Math.min(p.maxFloor,1+Math.floor((p.lv-1)/3)));p.x=1;p.y=1;p.dir=irnd(4);p.route=[];p.target=null;p.state='explore';p.battle=null;p.turnAnim=null;p.moveAnim=null;reveal(p);p.decision='独立探索を開始';
  addLog(p.name+' が B'+p.floor+'F に進入。',p);
 }
 function townStep(p){
@@ -166,24 +171,24 @@ function exploreStep(p){
  }
  var n=p.route[0],want=desiredDir(p,n[0],n[1]);
  if(p.dir!==want){var delta=(want-p.dir+4)%4,fromDir=p.dir,turnSign=delta===3?-1:1;p.dir=turnSign<0?(p.dir+3)%4:(p.dir+1)%4;startTurnAnim(p,fromDir,p.dir,turnSign);p.turn=1;p.decision=turnSign<0?'左へ旋回':'右へ旋回';return}
- p.x=n[0];p.y=n[1];p.route.shift();p.move=1;reveal(p);p.decision='1マス前進';rescueHere(p);meetHere(p);
+ var oldX=p.x,oldY=p.y;p.x=n[0];p.y=n[1];p.route.shift();p.move=1;startMoveAnim(p,oldX,oldY,p.x,p.y,p.dir);reveal(p);p.decision='1マス前進';rescueHere(p);meetHere(p);
  if(Math.random()<(.075+p.floor*.011)*p.encourage&&p.state==='explore'){startBattle(p);return}
  handleCell(p);
  if(p.state==='return'&&p.x===1&&p.y===1)ascendOrTown(p);
 }
 function ascendOrTown(p){
- if(p.floor>1){p.floor--;var up=floorData(p.floor).stairs;p.x=up%W;p.y=(up/W)|0;p.route=[];p.target=[1,1];p.decision='上層へ戻る';reveal(p);addLog(p.name+' が B'+p.floor+'F へ上がった。',p)}
+ if(p.floor>1){p.floor--;var up=floorData(p.floor).stairs;p.x=up%W;p.y=(up/W)|0;p.route=[];p.target=[1,1];p.turnAnim=null;p.moveAnim=null;p.decision='上層へ戻る';reveal(p);addLog(p.name+' が B'+p.floor+'F へ上がった。',p)}
  else{returnToTown(p)}
 }
 function returnToTown(p){
- returns++;p.state='town';p.town=irnd(8,4);p.gold+=p.loot*(12+p.floor*2);if(p.loot)addLog(p.name+' が戦利品を持って帰還。',p);p.loot=0;p.floor=0;p.route=[];p.target=null;p.battle=null;
+ returns++;p.state='town';p.town=irnd(8,4);p.gold+=p.loot*(12+p.floor*2);if(p.loot)addLog(p.name+' が戦利品を持って帰還。',p);p.loot=0;p.floor=0;p.route=[];p.target=null;p.battle=null;p.turnAnim=null;p.moveAnim=null;
 }
 function handleCell(p){
  var fd=floorData(p.floor),ii=key(p.x,p.y),e=fd.events[ii];
  if(e===1){fd.events[ii]=0;var g=irnd(28+p.floor*13,8);p.gold+=g;p.loot+=irnd(4,1);p.decision='宝箱を開けた';addLog(p.name+' が宝箱から '+g+'G を得た。',p)}
  else if(e===2){fd.events[ii]=0;if(Math.random()<.72){p.hp=Math.min(p.maxHp,p.hp+Math.ceil(p.maxHp*.4));p.decision='泉で傷を癒す';addLog(p.name+' が泉で回復。',p)}else{p.hp-=irnd(10+p.floor,3);addLog(p.name+' が毒の泉で傷ついた。',p);if(p.hp<=0)downPlayer(p,'毒')}}
  else if(e===3){fd.events[ii]=0;if(Math.random()<.55){var d=irnd(11+p.floor*2,4);p.hp-=d;addLog(p.name+' が罠で '+d+' ダメージ。',p);if(p.hp<=0)downPlayer(p,'罠')}else{p.gold+=15;p.decision='罠を見破った'}}
- else if(e===4&&p.state==='explore'){p.floor++;p.maxFloor=Math.max(p.maxFloor,p.floor);deepest=Math.max(deepest,p.floor);p.x=1;p.y=1;p.dir=irnd(4);p.route=[];p.target=null;reveal(p);p.decision='さらに深い階へ降りる';addLog(p.name+' が単独で B'+p.floor+'F へ。',p);if(p.floor>12){p.floor=1;p.maxFloor=Math.max(p.maxFloor,3);p.gold+=600;relics++;addLog(p.name+' が深層遺物を持ち帰った！',p);returnToTown(p)}}
+ else if(e===4&&p.state==='explore'){p.floor++;p.maxFloor=Math.max(p.maxFloor,p.floor);deepest=Math.max(deepest,p.floor);p.x=1;p.y=1;p.dir=irnd(4);p.route=[];p.target=null;p.turnAnim=null;p.moveAnim=null;reveal(p);p.decision='さらに深い階へ降りる';addLog(p.name+' が単独で B'+p.floor+'F へ。',p);if(p.floor>12){p.floor=1;p.maxFloor=Math.max(p.maxFloor,3);p.gold+=600;relics++;addLog(p.name+' が深層遺物を持ち帰った！',p);returnToTown(p)}}
 }
 function startBattle(p){
  var tier=Math.min(3,Math.floor((p.floor-1)/3)),base=EN[tier][irnd(EN[tier].length)];
@@ -312,16 +317,18 @@ function drawDungeonStatic(p){
  ctx.fillStyle='rgba(0,0,0,.62)';ctx.fillRect(14,14,280,64);ctx.textAlign='left';ctx.fillStyle=p.color;ctx.font='800 18px monospace';ctx.fillText(p.name+' / '+p.trait,28,39);ctx.fillStyle='#b3aa97';ctx.font='12px monospace';ctx.fillText('B'+p.floor+'F  HP '+Math.max(0,p.hp)+'/'+p.maxHp+'  '+DN[p.dir],28,61);
 }
 function smoothstep(t){return t*t*(3-2*t)}
-function renderDungeonBuffer(target,p,dir){
- var oldCtx=ctx,oldDir=p.dir;
+function renderDungeonBuffer(target,p,dir,x,y){
+ var oldCtx=ctx,oldDir=p.dir,oldX=p.x,oldY=p.y;
  ctx=target;p.dir=dir;
+ if(typeof x==='number')p.x=x;
+ if(typeof y==='number')p.y=y;
  drawDungeonStatic(p);
- p.dir=oldDir;ctx=oldCtx;
+ p.dir=oldDir;p.x=oldX;p.y=oldY;ctx=oldCtx;
 }
 function drawTurnTransition(p,a){
  var t=clamp((visualNow-a.start)/a.duration,0,1),e=smoothstep(t),w=V.width,h=V.height,shift=w*.72*e,sg=a.sign;
- renderDungeonBuffer(turnCtxA,p,a.from);
- renderDungeonBuffer(turnCtxB,p,a.to);
+ renderDungeonBuffer(turnCtxA,p,a.from,p.x,p.y);
+ renderDungeonBuffer(turnCtxB,p,a.to,p.x,p.y);
  ctx.fillStyle='#020304';ctx.fillRect(0,0,w,h);
  ctx.save();
  ctx.globalAlpha=1-e*.35;
@@ -342,9 +349,49 @@ function drawTurnTransition(p,a){
  else ctx.fillRect(w*.595-w*.19*e,h*.895,w*.19*e,4);
  if(t>=1)p.turnAnim=null;
 }
+function drawMoveTransition(p,a){
+ var t=clamp((visualNow-a.start)/a.duration,0,1),e=smoothstep(t),w=V.width,h=V.height;
+ renderDungeonBuffer(turnCtxA,p,a.dir,a.fromX,a.fromY);
+ renderDungeonBuffer(turnCtxB,p,a.dir,a.toX,a.toY);
+
+ ctx.fillStyle='#020304';ctx.fillRect(0,0,w,h);
+ var bob=Math.sin(Math.PI*e)*7;
+
+ // 旧マスを手前へ押し出す
+ ctx.save();
+ ctx.globalAlpha=1-e*.78;
+ ctx.translate(w*.5,h*.5+bob);
+ var oldScale=1+.42*e;
+ ctx.scale(oldScale,oldScale);
+ ctx.drawImage(turnA,-w*.5,-h*.5,w,h);
+ ctx.restore();
+
+ // 新マスを奥から滑らかに定位置へ入れる
+ ctx.save();
+ ctx.globalAlpha=.22+.78*e;
+ ctx.translate(w*.5,h*.5-bob*.35);
+ var newScale=.78+.22*e;
+ ctx.scale(newScale,newScale);
+ ctx.drawImage(turnB,-w*.5,-h*.5,w,h);
+ ctx.restore();
+
+ // 前進中だと分かる短い表示
+ ctx.fillStyle='rgba(0,0,0,.56)';ctx.fillRect(w*.415,h*.84,w*.17,40);
+ ctx.textAlign='center';ctx.font='800 17px monospace';ctx.fillStyle='#f2d897';
+ ctx.fillText('WALK  ↑',w*.5,h*.882);
+ ctx.fillStyle='rgba(242,216,151,.35)';ctx.fillRect(w*.43,h*.9,w*.14,3);
+ ctx.fillStyle='#f2d897';ctx.fillRect(w*.43,h*.9,w*.14*e,3);
+
+ if(t>=1)p.moveAnim=null;
+}
 function drawDungeon(p){
- if(p.turnAnim&&visualNow-p.turnAnim.start<p.turnAnim.duration+40)drawTurnTransition(p,p.turnAnim);
- else{p.turnAnim=null;drawDungeonStatic(p)}
+ if(p.turnAnim&&visualNow-p.turnAnim.start<p.turnAnim.duration+50){
+   drawTurnTransition(p,p.turnAnim);
+ }else if(p.moveAnim&&p.floor===p.moveAnim.floor&&visualNow-p.moveAnim.start<p.moveAnim.duration+50){
+   p.turnAnim=null;drawMoveTransition(p,p.moveAnim);
+ }else{
+   p.turnAnim=null;p.moveAnim=null;drawDungeonStatic(p);
+ }
 }
 function drawTown(p){
  ctx.fillStyle='#0b0d12';ctx.fillRect(0,0,V.width,V.height);var g=ctx.createLinearGradient(0,0,0,V.height);g.addColorStop(0,'#17171c');g.addColorStop(1,'#08090c');ctx.fillStyle=g;ctx.fillRect(0,0,V.width,V.height);
