@@ -179,7 +179,16 @@ function lowModule(){
 function moduleOfType(t){return modules.find(function(m){return m.type===t&&!m.broken})||modules.find(function(m){return m.type===t})||null}
 function nearestBroken(p){
  var a=modules.filter(function(m){return m.broken||m.health<70});
- a.sort(function(a,b){return dist(p,a)-dist(p,b)});return a[0]||null;
+ a.sort(function(a,b){
+   var aa=bots.filter(function(q){return q.target===a.id&&(q.state==='repair'||q.state==='repairMove')}).length;
+   var bb=bots.filter(function(q){return q.target===b.id&&(q.state==='repair'||q.state==='repairMove')}).length;
+   if(aa!==bb)return aa-bb;
+   if(a.health!==b.health)return a.health-b.health;
+   return dist(p,a)-dist(p,b);
+ });
+ if(!a.length)return null;
+ var assigned=bots.filter(function(q){return q.target===a[0].id&&(q.state==='repair'||q.state==='repairMove')}).length;
+ return assigned<2?a[0]:null;
 }
 function needsCharge(p){return p.battery<24}
 function criticalPower(){return res.energy<110}
@@ -194,6 +203,7 @@ function goCharge(p){
 }
 function chooseJob(p){
  if(needsCharge(p)){goCharge(p);return}
+ if((p.role==='engineer'||p.role==='utility')&&res.parts<8&&canMakeParts()){setJob(p,'partsMove',moduleOfType('workshop'),'修理用の予備部品を緊急製造します。');return}
  var broken=nearestBroken(p);
  if(broken&&(p.role==='engineer'||broken.health<42)){setJob(p,'repairMove',broken,broken.broken?'停止した設備の修理へ向かっています。':'劣化した設備の予防整備へ向かっています。');return}
 
@@ -289,7 +299,7 @@ function powerStep(dt){
  var gen=solar.reduce(function(a,m){return a+sun*2.15*(m.health/100)},0)*dt;
  var base=(.48+modules.length*.035+bots.length*.014)*dt;
  res.energy=clamp(res.energy+gen-base,0,1100);
- var gh=moduleOfType('greenhouse');if(gh&&!gh.broken&&res.energy>70)res.food+=dt*.025*(gh.health/100);
+ var gh=moduleOfType('greenhouse');if(gh&&!gh.broken&&res.energy>70)res.food+=dt*.135*(gh.health/100);
  res.food=Math.max(0,res.food-dt*.006*bots.length);
  modules.forEach(function(m){m.age+=dt;m.load=Math.max(0,m.load-dt*.08);if(!m.broken)m.health=Math.max(0,m.health-dt*.00045*(1+m.load*3))});
 }
@@ -326,6 +336,7 @@ function maybeExpand(){
  else if(res.food<120)desired=targets[2];
  else if(res.ore>170)desired=targets[1];
  else if(modules.length<11)desired=targets[irnd(Math.min(4,targets.length))];
+ if(modules.length>=26)return;
  if(desired&&res.metal>=desired.metal&&res.parts>=desired.parts){
    res.metal-=desired.metal;res.parts-=desired.parts;
    var ang=rnd(Math.PI*2),rad=rnd(270,190),x=550+Math.cos(ang)*rad,y=350+Math.sin(ang)*rad;
