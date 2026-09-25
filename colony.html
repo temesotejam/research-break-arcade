@@ -299,8 +299,8 @@ function powerStep(dt){
  var gen=solar.reduce(function(a,m){return a+sun*2.15*(m.health/100)},0)*dt;
  var base=(.48+modules.length*.035+bots.length*.014)*dt;
  res.energy=clamp(res.energy+gen-base,0,1100);
- var gh=moduleOfType('greenhouse');if(gh&&!gh.broken&&res.energy>70)res.food+=dt*.135*(gh.health/100);
- res.food=Math.max(0,res.food-dt*.006*bots.length);
+ var gh=moduleOfType('greenhouse');if(gh&&!gh.broken&&res.energy>70&&res.food<520)res.food+=dt*.135*(gh.health/100)*clamp((560-res.food)/180,.18,1);
+ res.food=clamp(res.food-dt*.006*bots.length,0,600);
  modules.forEach(function(m){m.age+=dt;m.load=Math.max(0,m.load-dt*.08);if(!m.broken)m.health=Math.max(0,m.health-dt*.00045*(1+m.load*3))});
 }
 function incidents(dt){
@@ -314,11 +314,11 @@ function incidents(dt){
 }
 function replenishRocks(){
  var active=rocks.filter(function(r){return r.ore>8}).length;
- if(active>=4)return;
- var add=3-active;
+ if(active>=6)return;
+ var add=6-active;
  for(var i=0;i<add;i++){
    var side=Math.random()<.5?0:1;
-   rocks.push({id:'r'+(rocks.length+i+1000),x:side?930+rnd(95,-25):55+rnd(110,-25),y:115+irnd(5)*105+rnd(22,-22),ore:irnd(260,140),rich:rnd(1.5,.8)});
+   rocks.push({id:'r'+(rocks.length+i+1000),x:side?930+rnd(95,-25):55+rnd(110,-25),y:115+irnd(5)*105+rnd(22,-22),ore:irnd(420,220),rich:rnd(1.5,.8)});
  }
  if(add>0)log('新しい小惑星片を捕捉。採掘班が進路を変更します。');
 }
@@ -336,6 +336,7 @@ function maybeExpand(){
  else if(res.food<120)desired=targets[2];
  else if(res.ore>170)desired=targets[1];
  else if(modules.length<11)desired=targets[irnd(Math.min(4,targets.length))];
+ else if(modules.length<26&&res.metal>260&&res.parts>45)desired=targets[irnd(targets.length)];
  if(modules.length>=26)return;
  if(desired&&res.metal>=desired.metal&&res.parts>=desired.parts){
    res.metal-=desired.metal;res.parts-=desired.parts;
@@ -357,7 +358,7 @@ function sim(dt){
  var prev=Math.floor(minutes/1440);minutes+=dt*speed;if(Math.floor(minutes/1440)>prev){cycle++;log('CYCLE '+cycle+'。コロニーは次の運用周期へ入りました。')}
  powerStep(dt*speed);incidents(dt*speed);buildStep(dt*speed);
  bots.forEach(function(p){workBot(p,dt*speed)});
- if(frameNo%80===0)maybeExpand();if(frameNo%420===0)replenishRocks();
+ if(frameNo%80===0)maybeExpand();if(frameNo%240===0)replenishRocks();
  frameNo++;
 }
 
