@@ -287,7 +287,7 @@ function workBot(p,dt){
  }
  if(p.state==='idle'){
    p.battery=clamp(p.battery+dt*.003,0,100);
-   if(frameNo%25===p.id%25)chooseJob(p);
+   if(frameNo%5===p.id%5)chooseJob(p);
  }
 }
 function actionLabel(s){
