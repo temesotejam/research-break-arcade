@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#090d16">
+<title>Autonomous Space Colony</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;padding:14px;background:#070b12;color:#e8edf4;font-family:ui-monospace,Consolas,monospace}
+.app{max-width:1460px;margin:auto}
+.top{display:flex;justify-content:space-between;gap:16px;align-items:end;flex-wrap:wrap;margin-bottom:12px}
+.ey{font-size:11px;letter-spacing:.16em;color:#79c7ff;font-weight:850}
+h1{font:700 clamp(30px,4vw,48px) Georgia,serif;margin:3px 0 5px}
+.desc{max-width:860px;margin:0;color:#8f9baa;font:13px/1.55 system-ui,sans-serif}
+.ctrl{display:flex;gap:7px;flex-wrap:wrap}
+button{min-height:40px;border:1px solid #40506a;background:#111927;color:#eef5ff;border-radius:7px;padding:8px 11px;font-weight:800;cursor:pointer}
+button.on{background:#17364d;border-color:#5faee0}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 375px;gap:12px}
+.card{border:1px solid #2b3646;background:#0e141e;border-radius:12px;overflow:hidden}
+.head{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid #263140}
+.badges{display:flex;gap:6px;flex-wrap:wrap}
+.badge{font-size:11px;border:1px solid #40506a;background:#121b2a;padding:5px 8px;border-radius:999px;color:#dce8f4}
+.world{position:relative;background:#02050a}
+.world canvas{display:block;width:100%;height:auto;aspect-ratio:11/7}
+.caption{padding:8px 12px;border-top:1px solid #263140;color:#68788a;font-size:10px;line-height:1.5}
+.sec{padding:11px 12px;border-bottom:1px solid #232c38}.sec h2{margin:0 0 8px;font-size:10px;letter-spacing:.14em;color:#87a9c0}
+.big{font:700 21px Georgia,serif;margin-bottom:4px}.sub{font:12px/1.5 system-ui,sans-serif;color:#8c98a6}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
+.stat{border:1px solid #293647;background:#111927;border-radius:7px;padding:7px}.stat span{display:block;font-size:9px;color:#6e7c8d}.stat b{font-size:15px}
+.bot{display:grid;grid-template-columns:12px 1fr auto;gap:8px;align-items:center}.dot{width:10px;height:10px;border-radius:50%}.bot strong{font-size:13px}.bot small{display:block;color:#6f7e8d;font-size:9px;margin-top:2px}
+.thought{margin-top:8px;padding:8px;border-left:2px solid #5ca9cf;background:#111925;font:11px/1.5 system-ui,sans-serif;color:#becbd8}
+.feed{padding:4px 12px 11px;max-height:280px;overflow:auto}.ev{font-size:10px;line-height:1.45;padding:6px 0;border-bottom:1px solid #202936}.ev small{display:block;color:#536170}
+.modules{display:grid;gap:6px}.mrow{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;font-size:10px}.bar{height:4px;background:#202a36;margin-top:3px}.bar i{height:100%;display:block;background:#5ea7d1}
+.note{padding:9px 12px;color:#617184;font-size:10px;line-height:1.5}
+@media(max-width:980px){.layout{grid-template-columns:1fr}.feed{max-height:210px}}
+@media(max-width:560px){body{padding:8px}.ctrl{width:100%}.ctrl button{flex:1}}
+</style>
+</head>
+<body>
+<main class="app">
+<div class="top">
+  <div>
+    <div class="ey">RESEARCH BREAK ARCADE / AUTONOMOUS COLONY</div>
+    <h1>自律する宇宙コロニー</h1>
+    <p class="desc">ロボットたちは採掘、運搬、精錬、発電、充電、修理、増築を自分で判断します。こちらから命令する必要はありません。うまく回っている時も、故障で全体が慌ただしくなる時も、そのまま眺めてください。</p>
+  </div>
+  <div class="ctrl">
+    <button id="pause">PAUSE</button>
+    <button class="sp on" data-s="1">1×</button>
+    <button class="sp" data-s="4">4×</button>
+    <button class="sp" data-s="12">12×</button>
+    <button id="random">RANDOM BOT</button>
+    <button id="new">NEW COLONY</button>
+  </div>
+</div>
+
+<div class="layout">
+<section class="card">
+  <div class="head">
+    <div class="badges">
+      <span class="badge" id="cycle">CYCLE 1</span>
+      <span class="badge" id="clock">00:00</span>
+      <span class="badge" id="light">SUN 100%</span>
+      <span class="badge" id="status">NOMINAL</span>
+    </div>
+    <span class="badge" id="headline">コロニー起動中…</span>
+  </div>
+  <div class="world"><canvas id="view" width="1100" height="700" aria-label="自律宇宙コロニー"></canvas></div>
+  <div class="caption">操作は不要です。ロボットをクリックすると選択できます。選択中でも他のロボットは自律行動を続けます。</div>
+</section>
+
+<aside class="card">
+  <div class="sec">
+    <h2>SELECTED BOT</h2>
+    <div id="botEmpty" class="sub">ロボットをクリックすると、担当・現在の仕事・積荷・バッテリーを表示します。</div>
+    <div id="botPanel" hidden>
+      <div class="bot"><i id="botDot" class="dot"></i><div><strong id="botName">--</strong><small id="botRole">--</small></div><span class="badge" id="botBattery">--</span></div>
+      <div id="botAction" class="big" style="margin-top:10px">--</div>
+      <div id="botPlace" class="sub">--</div>
+      <div id="botThought" class="thought">--</div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h2>COLONY RESOURCES</h2>
+    <div class="grid">
+      <div class="stat"><span>ENERGY</span><b id="energy">0</b></div>
+      <div class="stat"><span>ORE</span><b id="ore">0</b></div>
+      <div class="stat"><span>METAL</span><b id="metal">0</b></div>
+      <div class="stat"><span>PARTS</span><b id="parts">0</b></div>
+      <div class="stat"><span>FOOD</span><b id="food">0</b></div>
+      <div class="stat"><span>MODULES</span><b id="moduleCount">0</b></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h2>MODULE HEALTH</h2>
+    <div id="modules" class="modules"></div>
+  </div>
+
+  <div class="sec">
+    <h2>COLONY RECORD</h2>
+    <div class="grid">
+      <div class="stat"><span>ORE MINED</span><b id="mined">0</b></div>
+      <div class="stat"><span>REPAIRS</span><b id="repairs">0</b></div>
+      <div class="stat"><span>EXPANSIONS</span><b id="expansions">0</b></div>
+      <div class="stat"><span>INCIDENTS</span><b id="incidents">0</b></div>
+    </div>
+  </div>
+
+  <div class="sec"><h2>COLONY LOG</h2></div>
+  <div id="feed" class="feed"></div>
+  <div class="note">ロボットは役割を持ちますが、非常時には担当外の仕事も手伝います。電力不足時は採掘と精錬が縮小され、修理・充電・生命維持が優先されます。</div>
+</aside>
+</div>
+</main>
+
+<script>
+(function(){
+'use strict';
+
+var V=document.getElementById('view'),ctx=V.getContext('2d');
+var W=1100,H=700,paused=false,speed=1,last=performance.now(),minutes=0,cycle=1,selected=-1,logs=[],frameNo=0;
+var minedTotal=0,repairCount=0,expansionCount=0,incidentCount=0;
+var res={energy:620,ore:45,metal:85,parts:24,food:160};
+var bots=[],modules=[],rocks=[],pendingBuild=null;
+var botColors=['#6ec6ff','#6fe3a5','#ffc46b','#bd8cff','#ff7e91','#8de7e0'];
+var roleNames={miner:'採掘',hauler:'運搬',engineer:'整備',utility:'汎用'};
+var moduleNames={hub:'中央ハブ',solar:'太陽電池',battery:'蓄電池',refinery:'精錬炉',storage:'資材庫',workshop:'整備工房',greenhouse:'温室',comms:'通信塔',extractor:'自動採掘所'};
+var moduleColors={hub:'#68788d',solar:'#477c9e',battery:'#75649b',refinery:'#8a6257',storage:'#6e725b',workshop:'#7a6f66',greenhouse:'#4f8062',comms:'#55738a',extractor:'#8b7455'};
+
+function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+function rnd(a,b){if(b===undefined){b=0}return b+Math.random()*(a-b)}
+function irnd(a,b){return Math.floor(rnd(a,b))}
+function pick(a){return a[irnd(a.length)]}
+function dist(a,b){var dx=a.x-b.x,dy=a.y-b.y;return Math.sqrt(dx*dx+dy*dy)}
+function clockText(){var m=Math.floor(minutes%1440),h=Math.floor(m/60),mm=m%60;return String(h).padStart(2,'0')+':'+String(mm).padStart(2,'0')}
+function sunlight(){var t=(minutes%1440)/1440*Math.PI*2;return clamp((Math.sin(t-Math.PI*.15)+.15)*.62+.42,0,1)}
+function log(s){logs.unshift({c:cycle,t:clockText(),s:s});logs=logs.slice(0,32);document.getElementById('headline').textContent=s.length>42?s.slice(0,41)+'…':s}
+function moduleById(id){return modules.find(function(m){return m.id===id})}
+function botName(i){return 'R-'+String(i+1).padStart(2,'0')}
+
+function addModule(type,x,y){
+ var m={id:'m'+(modules.length+1),type:type,x:x,y:y,w:type==='solar'?92:70,h:type==='solar'?48:62,health:100,broken:false,load:0,age:0};
+ modules.push(m);return m;
+}
+function initModules(){
+ modules=[];
+ addModule('hub',530,332);
+ addModule('solar',220,110);addModule('solar',380,90);
+ addModule('battery',690,115);
+ addModule('refinery',805,285);
+ addModule('storage',675,455);
+ addModule('workshop',420,505);
+ addModule('greenhouse',215,405);
+ addModule('comms',900,95);
+}
+function initRocks(){
+ rocks=[];
+ for(var i=0;i<10;i++){
+   var side=i<5?0:1;
+   rocks.push({id:'r'+i,x:side?930+rnd(95,-25):55+rnd(110,-25),y:115+i%5*105+rnd(22,-22),ore:irnd(220,110),rich:rnd(1.4,.75)});
+ }
+}
+function makeBot(i){
+ var role=i<5?'miner':i<10?'hauler':i<14?'engineer':'utility',hub=moduleById('m1');
+ return {id:i,name:botName(i),role:role,color:botColors[i%botColors.length],x:hub.x+rnd(28,-28),y:hub.y+rnd(28,-28),battery:rnd(100,76),cargoOre:0,cargoMetal:0,cargoParts:0,state:'idle',target:null,targetKind:'module',progress:0,thought:'待機中',speed:rnd(58,48),stuck:0};
+}
+function initBots(){bots=[];for(var i=0;i<18;i++)bots.push(makeBot(i))}
+
+function chooseRock(){
+ var a=rocks.filter(function(r){return r.ore>0}).sort(function(a,b){return b.ore*b.rich-a.ore*a.rich});
+ return a[0]||null;
+}
+function lowModule(){
+ return modules.filter(function(m){return m.health<92}).sort(function(a,b){return a.health-b.health})[0]||null;
+}
+function moduleOfType(t){return modules.find(function(m){return m.type===t&&!m.broken})||modules.find(function(m){return m.type===t})||null}
+function nearestBroken(p){
+ var a=modules.filter(function(m){return m.broken||m.health<70});
+ a.sort(function(a,b){return dist(p,a)-dist(p,b)});return a[0]||null;
+}
+function needsCharge(p){return p.battery<24}
+function criticalPower(){return res.energy<110}
+function canRefine(){return res.ore>=10&&res.energy>=35&&moduleOfType('refinery')&&!moduleOfType('refinery').broken}
+function canMakeParts(){return res.metal>=10&&res.energy>=24&&moduleOfType('workshop')&&!moduleOfType('workshop').broken}
+
+function setJob(p,state,target,thought,kind){
+ p.state=state;p.target=target?target.id:null;p.targetKind=kind||'module';p.progress=0;p.thought=thought;
+}
+function goCharge(p){
+ var b=moduleOfType('battery')||moduleOfType('hub');setJob(p,'chargeMove',b,'蓄電池へ戻っています。');
+}
+function chooseJob(p){
+ if(needsCharge(p)){goCharge(p);return}
+ var broken=nearestBroken(p);
+ if(broken&&(p.role==='engineer'||broken.health<42)){setJob(p,'repairMove',broken,broken.broken?'停止した設備の修理へ向かっています。':'劣化した設備の予防整備へ向かっています。');return}
+
+ if(p.role==='miner'){
+   if(criticalPower()){setJob(p,'idle',moduleOfType('hub'),'電力回復まで採掘を待機しています。');return}
+   if(p.cargoOre>0){setJob(p,'oreDropMove',moduleOfType('storage'),'鉱石を資材庫へ運んでいます。');return}
+   var r=chooseRock();if(r){setJob(p,'mineMove',r,'鉱石の多い地点へ向かっています。','rock');return}
+ }
+ if(p.role==='hauler'){
+   var miner=bots.find(function(q){return q.role==='miner'&&q.cargoOre>=9});
+   if(miner){setJob(p,'pickupMove',miner,'採掘ロボットの鉱石を回収しに向かっています。','bot');return}
+   if(res.ore>=20&&canRefine()){setJob(p,'refineMove',moduleOfType('refinery'),'鉱石を精錬炉へ運びます。');return}
+   if(res.metal>=18&&res.parts<38&&canMakeParts()){setJob(p,'partsMove',moduleOfType('workshop'),'金属を整備工房へ運びます。');return}
+ }
+ if(p.role==='engineer'){
+   if(res.parts<18&&canMakeParts()){setJob(p,'partsMove',moduleOfType('workshop'),'予備部品を増やします。');return}
+   var weak=lowModule();if(weak&&weak.health<88){setJob(p,'repairMove',weak,'設備を点検します。');return}
+ }
+ if(p.role==='utility'){
+   if(res.food<110){setJob(p,'greenMove',moduleOfType('greenhouse'),'温室の生産を補助します。');return}
+   if(res.ore>=16&&canRefine()){setJob(p,'refineMove',moduleOfType('refinery'),'精錬を手伝います。');return}
+   var weak2=lowModule();if(weak2&&weak2.health<80){setJob(p,'repairMove',weak2,'整備班を手伝います。');return}
+ }
+ setJob(p,'idle',moduleOfType('hub'),'次の仕事を待っています。');
+}
+
+function targetObj(p){
+ if(p.targetKind==='rock')return rocks.find(function(r){return r.id===p.target});
+ if(p.targetKind==='bot')return bots.find(function(b){return b.id===p.target});
+ return moduleById(p.target);
+}
+function moveToward(p,o,dt){
+ if(!o)return true;
+ var dx=o.x-p.x,dy=o.y-p.y,d=Math.sqrt(dx*dx+dy*dy),step=p.speed*dt/60;
+ p.battery=clamp(p.battery-dt*.013,0,100);
+ if(d<step+7){p.x=o.x+rnd(10,-10);p.y=o.y+rnd(10,-10);return true}
+ p.x+=dx/d*step;p.y+=dy/d*step;return false;
+}
+function workBot(p,dt){
+ var o=targetObj(p);
+ if(/Move$/.test(p.state)){
+   if(moveToward(p,o,dt))p.state=p.state.replace('Move','');
+   return;
+ }
+ if(p.state==='mine'){
+   if(!o||o.ore<=0){p.target=null;p.state='idle';return}
+   if(criticalPower()){p.state='idle';p.target=null;return}
+   p.progress+=dt;o.ore=Math.max(0,o.ore-dt*.18*o.rich);p.cargoOre+=dt*.18*o.rich;minedTotal+=dt*.18*o.rich;res.energy=Math.max(0,res.energy-dt*.05);
+   p.battery=clamp(p.battery-dt*.025,0,100);
+   if(p.cargoOre>=16||o.ore<=0){p.target=null;setJob(p,'oreDropMove',moduleOfType('storage'),'採掘した鉱石を資材庫へ運びます。')}
+   return;
+ }
+ if(p.state==='oreDrop'){
+   res.ore+=p.cargoOre;p.cargoOre=0;p.state='idle';p.target=null;return;
+ }
+ if(p.state==='pickup'){
+   var q=o;if(q&&q.cargoOre>0){var take=Math.min(18,q.cargoOre);q.cargoOre-=take;p.cargoOre+=take}
+   setJob(p,'oreDropMove',moduleOfType('storage'),'回収した鉱石を資材庫へ運びます。');return;
+ }
+ if(p.state==='refine'){
+   if(res.ore>=8&&res.energy>=20){res.ore-=8;res.energy-=20;res.metal+=5.8;p.progress+=1;moduleOfType('refinery').load=1}
+   p.state='idle';p.target=null;return;
+ }
+ if(p.state==='parts'){
+   if(res.metal>=8&&res.energy>=16){res.metal-=8;res.energy-=16;res.parts+=5.2;moduleOfType('workshop').load=1}
+   p.state='idle';p.target=null;return;
+ }
+ if(p.state==='repair'){
+   if(!o){p.state='idle';return}
+   var use=Math.min(res.parts,dt*.12);if(use>0){res.parts-=use;o.health=clamp(o.health+use*3.2,0,100);p.progress+=use}
+   if(o.health>=96){if(o.broken){o.broken=false;repairCount++;log(p.name+' が '+moduleNames[o.type]+' を復旧しました。')}p.state='idle';p.target=null}
+   return;
+ }
+ if(p.state==='green'){
+   res.food+=dt*.10;res.energy=Math.max(0,res.energy-dt*.025);p.progress+=dt;
+   if(p.progress>18){p.state='idle';p.target=null}return;
+ }
+ if(p.state==='charge'){
+   p.battery=clamp(p.battery+dt*.75,0,100);res.energy=Math.max(0,res.energy-dt*.18);
+   if(p.battery>=92){p.state='idle';p.target=null;p.thought='充電完了。次の仕事を探しています。'}return;
+ }
+ if(p.state==='idle'){
+   p.battery=clamp(p.battery+dt*.003,0,100);
+   if(frameNo%25===p.id%25)chooseJob(p);
+ }
+}
+function actionLabel(s){
+ return {idle:'待機',mineMove:'採掘地点へ移動',mine:'採掘中',oreDropMove:'鉱石運搬',oreDrop:'荷下ろし',pickupMove:'回収へ移動',pickup:'鉱石回収',refineMove:'精錬炉へ移動',refine:'精錬',partsMove:'工房へ移動',parts:'部品製造',repairMove:'修理へ移動',repair:'修理中',greenMove:'温室へ移動',green:'温室補助',chargeMove:'充電へ移動',charge:'充電中'}[s]||s;
+}
+
+function powerStep(dt){
+ var sun=sunlight(),solar=modules.filter(function(m){return m.type==='solar'&&!m.broken});
+ var gen=solar.reduce(function(a,m){return a+sun*.58*(m.health/100)},0)*dt;
+ var base=(2.2+modules.length*.13+bots.length*.035)*dt;
+ res.energy=clamp(res.energy+gen-base,0,1100);
+ var gh=moduleOfType('greenhouse');if(gh&&!gh.broken&&res.energy>70)res.food+=dt*.025*(gh.health/100);
+ res.food=Math.max(0,res.food-dt*.006*bots.length);
+ modules.forEach(function(m){m.age+=dt;m.load=Math.max(0,m.load-dt*.08);if(!m.broken)m.health=Math.max(0,m.health-dt*.00045*(1+m.load*3))});
+}
+function incidents(dt){
+ if(Math.random()<dt*.000018*(1+modules.length*.04)){
+   var m=pick(modules.filter(function(q){return q.type!=='hub'}));if(m&&!m.broken){
+     incidentCount++;var dmg=rnd(42,18);m.health=Math.max(12,m.health-dmg);if(m.health<38)m.broken=true;
+     log(moduleNames[m.type]+' に故障。整備ロボットが対応を始めます。');
+   }
+ }
+ if(Math.random()<dt*.000012&&res.energy<180){incidentCount++;log('電力不足。採掘・精錬が自動的に縮小されました。')}
+}
+function maybeExpand(){
+ if(pendingBuild)return;
+ var targets=[
+   {type:'solar',metal:70,parts:18},
+   {type:'storage',metal:75,parts:16},
+   {type:'greenhouse',metal:95,parts:24},
+   {type:'battery',metal:105,parts:26},
+   {type:'extractor',metal:120,parts:30}
+ ];
+ var desired=null;
+ if(res.energy<360)desired=targets[0];
+ else if(res.food<120)desired=targets[2];
+ else if(res.ore>170)desired=targets[1];
+ else if(modules.length<11)desired=targets[irnd(Math.min(4,targets.length))];
+ if(desired&&res.metal>=desired.metal&&res.parts>=desired.parts){
+   res.metal-=desired.metal;res.parts-=desired.parts;
+   var ang=rnd(Math.PI*2),rad=rnd(270,190),x=550+Math.cos(ang)*rad,y=350+Math.sin(ang)*rad;
+   x=clamp(x,170,930);y=clamp(y,90,600);
+   pendingBuild={type:desired.type,x:x,y:y,progress:0,need:100};
+   log(moduleNames[desired.type]+' の増築が始まりました。');
+ }
+}
+function buildStep(dt){
+ if(!pendingBuild)return;
+ var helpers=bots.filter(function(p){return p.role==='engineer'||p.role==='utility'}).length;
+ pendingBuild.progress+=dt*(.11+helpers*.012);
+ if(pendingBuild.progress>=pendingBuild.need){
+   addModule(pendingBuild.type,pendingBuild.x,pendingBuild.y);expansionCount++;log(moduleNames[pendingBuild.type]+' が完成しました。');pendingBuild=null;
+ }
+}
+function sim(dt){
+ var prev=Math.floor(minutes/1440);minutes+=dt*speed;if(Math.floor(minutes/1440)>prev){cycle++;log('CYCLE '+cycle+'。コロニーは次の運用周期へ入りました。')}
+ powerStep(dt*speed);incidents(dt*speed);buildStep(dt*speed);
+ bots.forEach(function(p){workBot(p,dt*speed)});
+ if(frameNo%80===0)maybeExpand();
+ frameNo++;
+}
+
+function drawStars(){
+ ctx.fillStyle='#02050a';ctx.fillRect(0,0,W,H);
+ for(var i=0;i<120;i++){var x=(i*97)%W,y=(i*53)%H,tw=.25+((i*17+frameNo)%30)/80;ctx.fillStyle='rgba(210,230,255,'+tw+')';ctx.fillRect(x,y,i%7===0?2:1,i%7===0?2:1)}
+}
+function drawGround(){
+ ctx.fillStyle='#111722';ctx.beginPath();ctx.ellipse(550,390,475,285,0,0,Math.PI*2);ctx.fill();
+ ctx.strokeStyle='#28394c';ctx.lineWidth=2;ctx.stroke();
+ for(var i=0;i<36;i++){var x=120+(i*137)%860,y=160+(i*91)%430,r=4+(i%5)*2;ctx.strokeStyle='rgba(65,83,100,.28)';ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.stroke()}
+}
+function drawLinks(){
+ ctx.strokeStyle='rgba(88,141,177,.20)';ctx.lineWidth=2;
+ modules.forEach(function(m){if(m.type==='hub')return;ctx.beginPath();ctx.moveTo(565,350);ctx.lineTo(m.x,m.y);ctx.stroke()})
+}
+function drawModule(m){
+ var c=m.broken?'#7a3038':moduleColors[m.type]||'#667';
+ ctx.fillStyle='rgba(0,0,0,.35)';ctx.fillRect(m.x-m.w/2+5,m.y-m.h/2+5,m.w,m.h);
+ ctx.fillStyle=c;ctx.fillRect(m.x-m.w/2,m.y-m.h/2,m.w,m.h);
+ ctx.strokeStyle=m.broken?'#ff6f78':'rgba(190,220,245,.35)';ctx.lineWidth=2;ctx.strokeRect(m.x-m.w/2,m.y-m.h/2,m.w,m.h);
+ if(m.type==='solar'){
+   ctx.strokeStyle='rgba(180,220,255,.32)';ctx.lineWidth=1;
+   for(var x=m.x-m.w/2+12;x<m.x+m.w/2;x+=18){ctx.beginPath();ctx.moveTo(x,m.y-m.h/2+4);ctx.lineTo(x,m.y+m.h/2-4);ctx.stroke()}
+ }
+ ctx.fillStyle='#dce8f4';ctx.font='10px sans-serif';ctx.textAlign='center';ctx.fillText(moduleNames[m.type],m.x,m.y+4);
+ ctx.fillStyle='#18202a';ctx.fillRect(m.x-m.w/2,m.y+m.h/2+5,m.w,4);ctx.fillStyle=m.health>65?'#6fd3a1':m.health>35?'#e0b863':'#df6d75';ctx.fillRect(m.x-m.w/2,m.y+m.h/2+5,m.w*m.health/100,4);
+}
+function drawRocks(){
+ rocks.forEach(function(r){
+   ctx.fillStyle=r.ore>0?'#564e4a':'#2f3032';ctx.beginPath();ctx.arc(r.x,r.y,15+r.rich*5,0,7);ctx.fill();
+   if(r.ore>0){ctx.strokeStyle='rgba(230,180,120,.25)';ctx.beginPath();ctx.arc(r.x,r.y,7,0,7);ctx.stroke()}
+ })
+}
+function drawBots(){
+ bots.forEach(function(p){
+   if(p.id===selected){ctx.strokeStyle='rgba(255,245,188,.8)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(p.x,p.y,12+Math.sin(frameNo*.08)*2,0,7);ctx.stroke()}
+   ctx.fillStyle='rgba(0,0,0,.35)';ctx.beginPath();ctx.arc(p.x+2,p.y+3,5,0,7);ctx.fill();
+   ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,5,0,7);ctx.fill();
+   if(p.cargoOre>0){ctx.fillStyle='#caa06e';ctx.fillRect(p.x-3,p.y-10,6,5)}
+ })
+}
+function drawBuild(){
+ if(!pendingBuild)return;
+ ctx.strokeStyle='rgba(255,211,111,.75)';ctx.lineWidth=2;ctx.setLineDash([6,6]);ctx.strokeRect(pendingBuild.x-36,pendingBuild.y-30,72,60);ctx.setLineDash([]);
+ ctx.fillStyle='rgba(255,211,111,.18)';ctx.fillRect(pendingBuild.x-36,pendingBuild.y-30,72*pendingBuild.progress/pendingBuild.need,60);
+ ctx.fillStyle='#ffe2a2';ctx.font='10px sans-serif';ctx.textAlign='center';ctx.fillText('建設中 '+Math.floor(pendingBuild.progress)+'%',pendingBuild.x,pendingBuild.y+4);
+}
+function drawSunlight(){
+ var a=1-sunlight();if(a<=.03)return;ctx.fillStyle='rgba(4,8,22,'+(a*.48)+')';ctx.fillRect(0,0,W,H)
+}
+function drawSelectedPath(){
+ if(selected<0)return;var p=bots[selected],o=targetObj(p);if(!o)return;
+ ctx.strokeStyle='rgba(255,239,174,.45)';ctx.lineWidth=1.5;ctx.setLineDash([5,6]);ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(o.x,o.y);ctx.stroke();ctx.setLineDash([]);
+}
+function draw(){
+ drawStars();drawGround();drawLinks();drawRocks();modules.forEach(drawModule);drawBuild();drawSelectedPath();drawBots();drawSunlight();
+}
+
+function updateUI(){
+ document.getElementById('cycle').textContent='CYCLE '+cycle;
+ document.getElementById('clock').textContent=clockText();
+ document.getElementById('light').textContent='SUN '+Math.round(sunlight()*100)+'%';
+ document.getElementById('status').textContent=res.energy<100?'POWER LOW':modules.some(function(m){return m.broken})?'REPAIR':'NOMINAL';
+ document.getElementById('energy').textContent=Math.round(res.energy);
+ document.getElementById('ore').textContent=Math.round(res.ore);
+ document.getElementById('metal').textContent=Math.round(res.metal);
+ document.getElementById('parts').textContent=Math.round(res.parts);
+ document.getElementById('food').textContent=Math.round(res.food);
+ document.getElementById('moduleCount').textContent=modules.length+(pendingBuild?' +1':'');
+ document.getElementById('mined').textContent=Math.round(minedTotal);
+ document.getElementById('repairs').textContent=repairCount;
+ document.getElementById('expansions').textContent=expansionCount;
+ document.getElementById('incidents').textContent=incidentCount;
+
+ var rows=modules.slice().sort(function(a,b){return a.health-b.health}).slice(0,7);
+ document.getElementById('modules').innerHTML=rows.map(function(m){return '<div class="mrow"><div>'+moduleNames[m.type]+'<div class="bar"><i style="width:'+Math.round(m.health)+'%"></i></div></div><b>'+Math.round(m.health)+'%</b></div>'}).join('');
+ document.getElementById('feed').innerHTML=logs.map(function(e){return '<div class="ev"><small>CYCLE '+e.c+' / '+e.t+'</small>'+e.s+'</div>'}).join('');
+
+ if(selected<0){document.getElementById('botEmpty').hidden=false;document.getElementById('botPanel').hidden=true}
+ else{
+   var p=bots[selected],o=targetObj(p);
+   document.getElementById('botEmpty').hidden=true;document.getElementById('botPanel').hidden=false;
+   document.getElementById('botDot').style.background=p.color;
+   document.getElementById('botName').textContent=p.name;
+   document.getElementById('botRole').textContent=roleNames[p.role]+'ロボット';
+   document.getElementById('botBattery').textContent=Math.round(p.battery)+'%';
+   document.getElementById('botAction').textContent=actionLabel(p.state);
+   document.getElementById('botPlace').textContent='積荷: 鉱石 '+Math.round(p.cargoOre)+' / 目的地: '+(o?(o.name||moduleNames[o.type]||o.id):'なし');
+   document.getElementById('botThought').textContent=p.thought;
+ }
+}
+
+function init(){
+ minutes=0;cycle=1;selected=-1;logs=[];frameNo=0;minedTotal=0;repairCount=0;expansionCount=0;incidentCount=0;pendingBuild=null;
+ res={energy:620,ore:45,metal:85,parts:24,food:160};
+ initModules();initRocks();initBots();
+ log('自律運用開始。採掘班と運搬班が仕事を割り当てています。');updateUI();draw();
+}
+
+V.addEventListener('click',function(e){
+ var r=V.getBoundingClientRect(),x=(e.clientX-r.left)*V.width/r.width,y=(e.clientY-r.top)*V.height/r.height,best=-1,bd=18;
+ bots.forEach(function(p){var d=Math.hypot(p.x-x,p.y-y);if(d<bd){bd=d;best=p.id}});
+ if(best>=0){selected=best;updateUI()}
+});
+document.getElementById('pause').addEventListener('click',function(){paused=!paused;this.textContent=paused?'RESUME':'PAUSE'});
+document.getElementById('new').addEventListener('click',init);
+document.getElementById('random').addEventListener('click',function(){selected=irnd(bots.length);updateUI()});
+Array.prototype.forEach.call(document.querySelectorAll('.sp'),function(b){b.addEventListener('click',function(){speed=Number(this.getAttribute('data-s'));Array.prototype.forEach.call(document.querySelectorAll('.sp'),function(q){q.classList.toggle('on',q===b)})})});
+
+function loop(now){
+ var real=Math.min(.08,(now-last)/1000);last=now;if(!paused){sim(real*22);if(frameNo%5===0)updateUI()}draw();requestAnimationFrame(loop);
+}
+init();requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
