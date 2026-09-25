@@ -264,7 +264,7 @@ function workBot(p,dt){
  if(p.state==='repair'){
    if(!o){p.state='idle';return}
    var use=Math.min(res.parts,dt*.12);if(use>0){res.parts-=use;o.health=clamp(o.health+use*3.2,0,100);p.progress+=use}
-   if(o.health>=96){if(o.broken){o.broken=false;repairCount++;log(p.name+' が '+moduleNames[o.type]+' を復旧しました。')}p.state='idle';p.target=null}
+   if(o.health>=96){var wasBroken=o.broken;o.broken=false;repairCount++;log(p.name+' が '+moduleNames[o.type]+(wasBroken?' を復旧しました。':' の整備を完了しました。'));p.state='idle';p.target=null}
    return;
  }
  if(p.state==='green'){
@@ -296,11 +296,21 @@ function powerStep(dt){
 function incidents(dt){
  if(Math.random()<dt*.000075*(1+modules.length*.04)){
    var m=pick(modules.filter(function(q){return q.type!=='hub'}));if(m&&!m.broken){
-     incidentCount++;var dmg=rnd(42,18);m.health=Math.max(12,m.health-dmg);if(m.health<38)m.broken=true;
+     incidentCount++;var dmg=rnd(58,24);m.health=Math.max(12,m.health-dmg);if(m.health<52)m.broken=true;
      log(moduleNames[m.type]+' に故障。整備ロボットが対応を始めます。');
    }
  }
  if(Math.random()<dt*.000035&&res.energy<180){incidentCount++;log('電力不足。採掘・精錬が自動的に縮小されました。')}
+}
+function replenishRocks(){
+ var active=rocks.filter(function(r){return r.ore>8}).length;
+ if(active>=4)return;
+ var add=3-active;
+ for(var i=0;i<add;i++){
+   var side=Math.random()<.5?0:1;
+   rocks.push({id:'r'+(rocks.length+i+1000),x:side?930+rnd(95,-25):55+rnd(110,-25),y:115+irnd(5)*105+rnd(22,-22),ore:irnd(260,140),rich:rnd(1.5,.8)});
+ }
+ if(add>0)log('新しい小惑星片を捕捉。採掘班が進路を変更します。');
 }
 function maybeExpand(){
  if(pendingBuild)return;
@@ -336,7 +346,7 @@ function sim(dt){
  var prev=Math.floor(minutes/1440);minutes+=dt*speed;if(Math.floor(minutes/1440)>prev){cycle++;log('CYCLE '+cycle+'。コロニーは次の運用周期へ入りました。')}
  powerStep(dt*speed);incidents(dt*speed);buildStep(dt*speed);
  bots.forEach(function(p){workBot(p,dt*speed)});
- if(frameNo%80===0)maybeExpand();
+ if(frameNo%80===0)maybeExpand();if(frameNo%420===0)replenishRocks();
  frameNo++;
 }
 
