@@ -109,7 +109,7 @@ button.on{background:#28443a;border-color:#75b996}
 
 var V=document.getElementById('view'),ctx=V.getContext('2d');
 var W=1100,H=700,paused=false,speed=1,last=performance.now(),simMinutes=6*60,day=1,weather='clear',weatherUntil=11*60;
-var selected=-1,logs=[],encounters=0,shopVisits=0,frameNo=0;
+var selected=-1,logs=[],encounters=0,shopVisits=0,frameNo=0,momentFlags={};
 
 var roadX=[160,430,700,970],roadY=[145,340,535];
 var colors=['#e0786e','#e2ad62','#72b5d8','#80ba86','#b58bd1','#d887aa','#74c4b7','#d09567','#8ea9de','#b8b36e'];
@@ -308,7 +308,13 @@ function decidePerson(p){
  if(p.chat>0)return;
  var desired=desiredFor(p);
  if(desired!==p.target||(!p.route.length&&p.place!==desired))setTarget(p,desired);
- if(!p.route.length&&p.place===desired&&p.state==='commuting')arrive(p);
+ if(!p.route.length&&p.place===desired){
+   if(p.state==='commuting')arrive(p);
+   else{
+     var nextState=activityFor(p,p.place);
+     if(nextState!==p.state){p.state=nextState;p.thought=thoughtFor(p)}
+   }
+ }
 }
 
 function maybeChat(p,dt){
@@ -343,11 +349,25 @@ function newDay(){
  people.forEach(function(p){p.dayPlan=day;p.friend=-1;p.chat=0;p.planKey='';p.planTarget='';p.mood=clamp(p.mood+rnd(.08,-.04),.15,1)});
  log('DAY '+day+'。街に新しい朝が来ました。');
 }
+function townMoments(){
+ var m=simMinutes%1440,marks=[
+  [mins(7,30),'朝の通勤・通学時間。駅前と大通りに人が増えてきました。'],
+  [mins(8,50),'学校と職場が動き始め、街路が少し静かになりました。'],
+  [mins(12,0),'昼休み。カフェと公園に人が集まり始めています。'],
+  [mins(17,10),'仕事と授業が終わり、街に人が戻ってきました。'],
+  [mins(22,20),'店の灯りが減り、住民たちは家へ帰っていきます。']
+ ];
+ for(var i=0;i<marks.length;i++){
+   var k=day+'-'+marks[i][0];
+   if(m>=marks[i][0]&&m<marks[i][0]+8&&!momentFlags[k]){momentFlags[k]=1;log(marks[i][1])}
+ }
+}
 function sim(dt){
  var prev=Math.floor(simMinutes/1440);
  simMinutes+=dt*speed;
  if(Math.floor(simMinutes/1440)>prev)newDay();
  if(simMinutes>=weatherUntil)chooseWeather();
+ townMoments();
 
  people.forEach(function(p){
    updateNeeds(p,dt*speed);
@@ -483,7 +503,7 @@ function updateUI(){
 }
 
 function init(){
- people=[];logs=[];encounters=0;shopVisits=0;selected=-1;simMinutes=mins(5,45);day=1;weather='clear';weatherUntil=mins(10,30);frameNo=0;
+ people=[];logs=[];encounters=0;shopVisits=0;selected=-1;simMinutes=mins(5,45);day=1;weather='clear';weatherUntil=mins(10,30);frameNo=0;momentFlags={};
  for(var i=0;i<40;i++)people.push(makePerson(i));
  log('静かな朝。家々の明かりが少しずつ消えていきます。');
  updateUI();draw();
