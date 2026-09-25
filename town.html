@@ -202,7 +202,7 @@ function makePerson(i){
    x:home.door[0]+rnd(8,-8),y:home.door[1]+rnd(8,-8),place:home.id,target:home.id,
    route:[],ri:0,state:'sleeping',mood:rnd(.82,.55),energy:rnd(.95,.72),hunger:rnd(.35,.08),
    social:rnd(1,.2),curiosity:rnd(1,.15),routine:rnd(1,.2),friend:-1,chat:0,lastDecision:-999,dayPlan:-1,
-   thought:'まだ眠っています。',visits:0
+   thought:'まだ眠っています。',visits:0,planKey:'',planTarget:''
  };
  return p;
 }
@@ -219,36 +219,22 @@ function chooseLeisure(p){
  return Math.random()<.5?'park':'library';
 }
 function desiredFor(p){
- var m=simMinutes%1440;
+ var m=simMinutes%1440,slot,target;
  if(p.chat>0)return p.target;
- if(m<mins(6,10))return p.home;
- if(m<mins(7,30)){
-   if(p.role==='retired')return weather==='rain'?p.home:'park';
-   return p.home;
- }
- if(m<mins(8,50)){
-   if(p.role==='retired')return chooseLeisure(p);
-   return p.work;
- }
- if(m<mins(12))return p.role==='retired'?chooseLeisure(p):p.work;
- if(m<mins(13,10)){
-   if(p.role==='student')return Math.random()<.55?'park':'cafe';
-   if(p.role==='retired')return chooseLeisure(p);
-   return Math.random()<.62?'cafe':'park';
- }
- if(m<mins(17,10)){
-   if(p.role==='retired')return chooseLeisure(p);
-   return p.work;
- }
- if(m<mins(20,20)){
-   if(p.hunger>.72)return isOpen('market')?'market':p.home;
-   return chooseLeisure(p);
- }
- if(m<mins(22,20)){
-   if(p.social>.8&&Math.random()<.10&&isOpen('cafe'))return 'cafe';
-   return p.home;
- }
- return p.home;
+
+ if(m<mins(6,10)){slot='sleep';target=p.home}
+ else if(m<mins(7,30)){slot='early-'+weather;target=p.role==='retired'?(weather==='rain'?p.home:'park'):p.home}
+ else if(m<mins(8,50)){slot='commute-am';target=p.role==='retired'?chooseLeisure(p):p.work}
+ else if(m<mins(12)){slot='morning-'+(p.role==='retired'?weather:'work');target=p.role==='retired'?chooseLeisure(p):p.work}
+ else if(m<mins(13,10)){slot='lunch-'+weather;if(p.role==='student')target=Math.random()<.55?'park':'cafe';else if(p.role==='retired')target=chooseLeisure(p);else target=Math.random()<.62?'cafe':'park'}
+ else if(m<mins(17,10)){slot='afternoon-'+(p.role==='retired'?weather:'work');target=p.role==='retired'?chooseLeisure(p):p.work}
+ else if(m<mins(20,20)){slot='evening-'+weather;if(p.hunger>.72)target=isOpen('market')?'market':p.home;else target=chooseLeisure(p)}
+ else if(m<mins(22,20)){slot='late';target=(p.social>.8&&Math.random()<.10&&isOpen('cafe'))?'cafe':p.home}
+ else{slot='night';target=p.home}
+
+ if(p.planKey===slot&&p.planTarget)return p.planTarget;
+ p.planKey=slot;p.planTarget=target;
+ return target;
 }
 
 function activityFor(p,id){
@@ -318,12 +304,12 @@ function decidePerson(p){
  if(!p.route.length&&p.place===desired&&p.state==='commuting')arrive(p);
 }
 
-function maybeChat(p){
+function maybeChat(p,dt){
  if(p.chat>0||p.state==='commuting'||p.state==='sleeping')return;
  for(var i=p.id+1;i<people.length;i++){
    var q=people[i];
    if(q.chat>0||q.state==='commuting'||q.state==='sleeping'||q.place!==p.place)continue;
-   if(dist(p,q)<22&&Math.random()<.0022*(.4+p.social+q.social)){
+   if(dist(p,q)<22&&Math.random()<.00055*dt*(.4+p.social+q.social)){
      p.chat=q.chat=irnd(20,8);p.friend=q.id;q.friend=p.id;p.state=q.state='chatting';encounters++;
      p.mood=clamp(p.mood+.06,0,1);q.mood=clamp(q.mood+.06,0,1);
      log(p.name+' と '+q.name+' が '+placeName(p.place)+' で立ち話。');
@@ -347,7 +333,7 @@ function temperature(){
 
 function newDay(){
  day++;
- people.forEach(function(p){p.dayPlan=day;p.friend=-1;p.chat=0;p.mood=clamp(p.mood+rnd(.08,-.04),.15,1)});
+ people.forEach(function(p){p.dayPlan=day;p.friend=-1;p.chat=0;p.planKey='';p.planTarget='';p.mood=clamp(p.mood+rnd(.08,-.04),.15,1)});
  log('DAY '+day+'。街に新しい朝が来ました。');
 }
 function sim(dt){
@@ -361,7 +347,7 @@ function sim(dt){
    if(p.chat>0){p.chat-=dt*speed;if(p.chat<=0){p.chat=0;p.friend=-1;p.state=activityFor(p,p.place);p.thought=thoughtFor(p)}}
    if(frameNo%18===p.id%18)decidePerson(p);
    movePerson(p,dt*speed);
-   maybeChat(p);
+   maybeChat(p,dt*speed);
  });
  frameNo++;
 }
