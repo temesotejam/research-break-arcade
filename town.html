@@ -307,7 +307,7 @@ function updateNeeds(p,dt){
 function movePerson(p,dt){
  if(!p.route.length)return;
  var q=p.route[0],dx=q.x-p.x,dy=q.y-p.y,d=Math.sqrt(dx*dx+dy*dy);
- var pace=(p.role==='retired'?21:p.role==='student'?30:26)*dt/60;
+ var pace=(p.role==='retired'?280:p.role==='student'?420:360)*dt/60;
  if(d<=pace+1){p.x=q.x;p.y=q.y;p.route.shift();if(!p.route.length)arrive(p)}
  else{p.x+=dx/d*pace;p.y+=dy/d*pace}
 }
