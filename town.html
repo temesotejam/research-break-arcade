@@ -260,8 +260,15 @@ function setTarget(p,id){
  p.state='commuting';
  p.thought=placeName(id)+'へ向かっています。';
 }
+function settlePoint(p,id){
+ var b=B[id];if(!b)return[p.x,p.y];
+ var px=b.x+12+((p.id*37+day*11)%Math.max(18,b.w-24));
+ var py=b.y+28+((p.id*53+day*7)%Math.max(18,b.h-38));
+ return[clamp(px,b.x+10,b.x+b.w-10),clamp(py,b.y+24,b.y+b.h-10)];
+}
 function arrive(p){
  p.place=p.target;p.route=[];p.ri=0;p.state=activityFor(p,p.place);
+ var sp=settlePoint(p,p.place);p.x=sp[0];p.y=sp[1];
  if(p.state==='shopping'){p.visits++;shopVisits++}
  if(p.state==='eating'){p.hunger=Math.max(.08,p.hunger-.58);p.mood=clamp(p.mood+.08,0,1)}
  if(p.state==='walking'){p.mood=clamp(p.mood+.035,0,1)}
@@ -293,7 +300,7 @@ function updateNeeds(p,dt){
 function movePerson(p,dt){
  if(!p.route.length)return;
  var q=p.route[0],dx=q.x-p.x,dy=q.y-p.y,d=Math.sqrt(dx*dx+dy*dy);
- var pace=(p.role==='retired'?280:p.role==='student'?420:360)*dt/60;
+ var pace=(p.role==='retired'?700:p.role==='student'?1100:1000)*dt/60;
  if(d<=pace+1){p.x=q.x;p.y=q.y;p.route.shift();if(!p.route.length)arrive(p)}
  else{p.x+=dx/d*pace;p.y+=dy/d*pace}
 }
@@ -309,7 +316,7 @@ function maybeChat(p,dt){
  for(var i=p.id+1;i<people.length;i++){
    var q=people[i];
    if(q.chat>0||q.state==='commuting'||q.state==='sleeping'||q.place!==p.place)continue;
-   if(dist(p,q)<22&&Math.random()<.00055*dt*(.4+p.social+q.social)){
+   if(dist(p,q)<52&&Math.random()<.00042*dt*(.4+p.social+q.social)){
      p.chat=q.chat=irnd(20,8);p.friend=q.id;q.friend=p.id;p.state=q.state='chatting';encounters++;
      p.mood=clamp(p.mood+.06,0,1);q.mood=clamp(q.mood+.06,0,1);
      log(p.name+' と '+q.name+' が '+placeName(p.place)+' で立ち話。');
