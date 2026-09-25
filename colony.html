@@ -165,7 +165,7 @@ function initRocks(){
 }
 function makeBot(i){
  var role=i<5?'miner':i<10?'hauler':i<14?'engineer':'utility',hub=moduleById('m1');
- return {id:i,name:botName(i),role:role,color:botColors[i%botColors.length],x:hub.x+rnd(28,-28),y:hub.y+rnd(28,-28),battery:rnd(100,76),cargoOre:0,cargoMetal:0,cargoParts:0,state:'idle',target:null,targetKind:'module',progress:0,thought:'待機中',speed:rnd(58,48),stuck:0};
+ return {id:i,name:botName(i),role:role,color:botColors[i%botColors.length],x:hub.x+rnd(28,-28),y:hub.y+rnd(28,-28),battery:rnd(100,76),cargoOre:0,cargoMetal:0,cargoParts:0,state:'idle',target:null,targetKind:'module',progress:0,thought:'待機中',speed:rnd(340,260),stuck:0};
 }
 function initBots(){bots=[];for(var i=0;i<18;i++)bots.push(makeBot(i))}
 
@@ -286,21 +286,21 @@ function actionLabel(s){
 
 function powerStep(dt){
  var sun=sunlight(),solar=modules.filter(function(m){return m.type==='solar'&&!m.broken});
- var gen=solar.reduce(function(a,m){return a+sun*.58*(m.health/100)},0)*dt;
- var base=(2.2+modules.length*.13+bots.length*.035)*dt;
+ var gen=solar.reduce(function(a,m){return a+sun*2.15*(m.health/100)},0)*dt;
+ var base=(.48+modules.length*.035+bots.length*.014)*dt;
  res.energy=clamp(res.energy+gen-base,0,1100);
  var gh=moduleOfType('greenhouse');if(gh&&!gh.broken&&res.energy>70)res.food+=dt*.025*(gh.health/100);
  res.food=Math.max(0,res.food-dt*.006*bots.length);
  modules.forEach(function(m){m.age+=dt;m.load=Math.max(0,m.load-dt*.08);if(!m.broken)m.health=Math.max(0,m.health-dt*.00045*(1+m.load*3))});
 }
 function incidents(dt){
- if(Math.random()<dt*.000018*(1+modules.length*.04)){
+ if(Math.random()<dt*.000075*(1+modules.length*.04)){
    var m=pick(modules.filter(function(q){return q.type!=='hub'}));if(m&&!m.broken){
      incidentCount++;var dmg=rnd(42,18);m.health=Math.max(12,m.health-dmg);if(m.health<38)m.broken=true;
      log(moduleNames[m.type]+' に故障。整備ロボットが対応を始めます。');
    }
  }
- if(Math.random()<dt*.000012&&res.energy<180){incidentCount++;log('電力不足。採掘・精錬が自動的に縮小されました。')}
+ if(Math.random()<dt*.000035&&res.energy<180){incidentCount++;log('電力不足。採掘・精錬が自動的に縮小されました。')}
 }
 function maybeExpand(){
  if(pendingBuild)return;
