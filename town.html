@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#111722">
+<title>Small Town Day — Autonomous Town</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;padding:14px;background:#0d1118;color:#e8e4d8;font-family:ui-monospace,Consolas,monospace}
+.app{max-width:1460px;margin:auto}
+.top{display:flex;justify-content:space-between;gap:16px;align-items:end;flex-wrap:wrap;margin-bottom:12px}
+.ey{font-size:11px;letter-spacing:.16em;color:#8fb8a0;font-weight:850}
+h1{font:700 clamp(30px,4vw,48px) Georgia,serif;margin:3px 0 5px}
+.desc{max-width:850px;margin:0;color:#969991;font:13px/1.55 system-ui,sans-serif}
+.ctrl{display:flex;gap:7px;flex-wrap:wrap}
+button{min-height:40px;border:1px solid #46505a;background:#171d26;color:#eee9db;border-radius:7px;padding:8px 11px;font-weight:800;cursor:pointer}
+button.on{background:#28443a;border-color:#75b996}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:12px}
+.card{border:1px solid #343b43;background:#121820;border-radius:12px;overflow:hidden}
+.head{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid #2b3239}
+.badges{display:flex;gap:6px;flex-wrap:wrap}.badge{font-size:11px;border:1px solid #45505a;background:#18202a;padding:5px 8px;border-radius:999px;color:#d5d7d1}
+.world{position:relative;background:#101722}.world canvas{display:block;width:100%;height:auto;aspect-ratio:11/7}
+.caption{padding:8px 12px;border-top:1px solid #2b3239;color:#737c7b;font-size:10px;line-height:1.5}
+.sec{padding:11px 12px;border-bottom:1px solid #2a3036}.sec h2{margin:0 0 8px;font-size:10px;letter-spacing:.14em;color:#9eb6a7}
+.big{font:700 22px Georgia,serif;margin-bottom:4px}.sub{font:12px/1.5 system-ui,sans-serif;color:#92988f}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}.stat{border:1px solid #303941;background:#171e27;border-radius:7px;padding:7px}.stat span{display:block;font-size:9px;color:#727c7a}.stat b{font-size:15px}
+.person{display:grid;grid-template-columns:12px 1fr auto;gap:8px;align-items:center}.avatar{width:10px;height:10px;border-radius:50%}.person strong{font-size:13px}.person small{display:block;color:#747d7a;font-size:9px;margin-top:2px}
+.thought{margin-top:8px;padding:8px;border-left:2px solid #668a75;background:#151c23;font:11px/1.5 system-ui,sans-serif;color:#bdc2b8}
+.feed{padding:4px 12px 11px;max-height:280px;overflow:auto}.ev{font-size:10px;line-height:1.45;padding:6px 0;border-bottom:1px solid #222a30}.ev small{display:block;color:#5f6b69}
+.crowd{display:grid;gap:6px}.crowdrow{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;font-size:10px}.bar{height:4px;background:#252d34;margin-top:3px}.bar i{height:100%;display:block;background:#759a82}
+.note{padding:9px 12px;color:#65706e;font-size:10px;line-height:1.5}
+@media(max-width:980px){.layout{grid-template-columns:1fr}.feed{max-height:200px}}
+@media(max-width:560px){body{padding:8px}.ctrl{width:100%}.ctrl button{flex:1}.grid{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<main class="app">
+<div class="top">
+  <div>
+    <div class="ey">RESEARCH BREAK ARCADE / AUTONOMOUS TOWN</div>
+    <h1>小さな街の一日</h1>
+    <p class="desc">住民たちは朝起きて、仕事や学校へ向かい、昼食を取り、買い物や散歩をして家へ帰ります。操作しなくても街は勝手に一日を繰り返します。気になる住民をクリックすると、その人の一日だけを追いかけられます。</p>
+  </div>
+  <div class="ctrl">
+    <button id="pause">PAUSE</button>
+    <button class="sp on" data-s="1">1×</button>
+    <button class="sp" data-s="4">4×</button>
+    <button class="sp" data-s="12">12×</button>
+    <button id="random">RANDOM PERSON</button>
+    <button id="new">NEW TOWN</button>
+  </div>
+</div>
+
+<div class="layout">
+<section class="card">
+  <div class="head">
+    <div class="badges">
+      <span class="badge" id="day">DAY 1</span>
+      <span class="badge" id="clock">06:00</span>
+      <span class="badge" id="weather">晴れ</span>
+      <span class="badge" id="temp">18°C</span>
+    </div>
+    <span class="badge" id="headline">街が目を覚まし始めています。</span>
+  </div>
+  <div class="world"><canvas id="view" width="1100" height="700" aria-label="自律して暮らす小さな街"></canvas></div>
+  <div class="caption">操作は不要です。住民をクリックすると選択できます。選択しても街の時間や他の住民の行動はそのまま進みます。</div>
+</section>
+
+<aside class="card">
+  <div class="sec">
+    <h2>SELECTED RESIDENT</h2>
+    <div id="personEmpty" class="sub">街の住民をクリックすると、その人の現在地・行動・気分が表示されます。</div>
+    <div id="personPanel" hidden>
+      <div class="person"><i id="personDot" class="avatar"></i><div><strong id="personName">--</strong><small id="personRole">--</small></div><span class="badge" id="personAge">--</span></div>
+      <div id="personAction" class="big" style="margin-top:10px">--</div>
+      <div id="personPlace" class="sub">--</div>
+      <div id="personThought" class="thought">--</div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h2>TOWN PULSE</h2>
+    <div class="grid">
+      <div class="stat"><span>POPULATION</span><b id="population">0</b></div>
+      <div class="stat"><span>OUTSIDE</span><b id="outside">0</b></div>
+      <div class="stat"><span>WORKING</span><b id="working">0</b></div>
+      <div class="stat"><span>CHATTING</span><b id="chatting">0</b></div>
+      <div class="stat"><span>SHOP VISITS</span><b id="visits">0</b></div>
+      <div class="stat"><span>ENCOUNTERS</span><b id="encounters">0</b></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h2>BUSY PLACES</h2>
+    <div id="crowd" class="crowd"></div>
+  </div>
+
+  <div class="sec"><h2>TOWN DIARY</h2></div>
+  <div id="feed" class="feed"></div>
+  <div class="note">天候・時間帯・性格・空腹・疲労で予定は少しずつ変化します。雨の日は公園よりカフェや店に人が集まりやすくなります。</div>
+</aside>
+</div>
+</main>
+
+<script>
+(function(){
+'use strict';
+
+var V=document.getElementById('view'),ctx=V.getContext('2d');
+var W=1100,H=700,paused=false,speed=1,last=performance.now(),simMinutes=6*60,day=1,weather='clear',weatherUntil=11*60;
+var selected=-1,logs=[],encounters=0,shopVisits=0,frameNo=0;
+
+var roadX=[160,430,700,970],roadY=[145,340,535];
+var colors=['#e0786e','#e2ad62','#72b5d8','#80ba86','#b58bd1','#d887aa','#74c4b7','#d09567','#8ea9de','#b8b36e'];
+var firstNames=['Aki','Ren','Mio','Haru','Sora','Yui','Nao','Kota','Rin','Mei','Jun','Aya','Toma','Riku','Hina','Ema','Kai','Noa','Rei','Maki','Shun','Sara','Nagi','Yuna','Itsuki','Kaho','Leo','Mina','Ryo','Aoi','Kiri','Fumi','Ken','Nana','Toru','Iro','Sho','Mari','Yuto','Rana'];
+
+var buildings=[
+ {id:'h1',name:'楓ハイツ',type:'home',x:24,y:22,w:110,h:94,door:[160,80]},
+ {id:'h2',name:'朝日住宅',type:'home',x:210,y:24,w:160,h:88,door:[300,145]},
+ {id:'h3',name:'川辺アパート',type:'home',x:470,y:22,w:160,h:92,door:[540,145]},
+ {id:'h4',name:'丘の家',type:'home',x:770,y:24,w:150,h:88,door:[845,145]},
+ {id:'h5',name:'北町住宅',type:'home',x:995,y:32,w:82,h:100,door:[970,92]},
+ {id:'office',name:'市民オフィス',type:'work',x:205,y:188,w:178,h:110,door:[300,340]},
+ {id:'school',name:'若葉学校',type:'school',x:475,y:186,w:175,h:112,door:[565,340]},
+ {id:'clinic',name:'小町診療所',type:'clinic',x:752,y:194,w:160,h:104,door:[830,340]},
+ {id:'market',name:'みどり市場',type:'market',x:22,y:387,w:112,h:110,door:[160,450]},
+ {id:'cafe',name:'喫茶つばめ',type:'cafe',x:210,y:390,w:170,h:102,door:[300,535]},
+ {id:'park',name:'中央公園',type:'park',x:472,y:382,w:178,h:120,door:[565,535]},
+ {id:'library',name:'町立図書館',type:'library',x:750,y:390,w:166,h:104,door:[835,535]},
+ {id:'factory',name:'小さな工房',type:'work',x:992,y:388,w:84,h:108,door:[970,450]},
+ {id:'station',name:'駅前広場',type:'station',x:50,y:585,w:230,h:88,door:[160,535]},
+ {id:'bakery',name:'パン屋こむぎ',type:'market',x:320,y:575,w:145,h:88,door:[430,535]},
+ {id:'river',name:'河川敷',type:'park',x:530,y:582,w:245,h:85,door:[700,535]},
+ {id:'hall',name:'交流会館',type:'hall',x:825,y:578,w:215,h:88,door:[970,535]}
+];
+
+var B={};buildings.forEach(function(b){B[b.id]=b});
+var homes=buildings.filter(function(b){return b.type==='home'});
+var places=buildings.filter(function(b){return b.type!=='home'});
+
+function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+function rnd(a,b){if(b===undefined){b=0}return b+Math.random()*(a-b)}
+function irnd(a,b){return Math.floor(rnd(a,b))}
+function pick(a){return a[irnd(a.length)]}
+function mins(h,m){return h*60+(m||0)}
+function clockText(m){m=((m%1440)+1440)%1440;var h=Math.floor(m/60),mm=Math.floor(m%60);return String(h).padStart(2,'0')+':'+String(mm).padStart(2,'0')}
+function log(s){logs.unshift({d:day,t:clockText(simMinutes),s:s});logs=logs.slice(0,30);document.getElementById('headline').textContent=s.length>39?s.slice(0,38)+'…':s}
+function dist(a,b){var dx=a.x-b.x,dy=a.y-b.y;return Math.sqrt(dx*dx+dy*dy)}
+function placeName(id){return B[id]?B[id].name:'街路'}
+function isNight(){var m=simMinutes%1440;return m<mins(5,30)||m>mins(18,20)}
+function isOpen(id){
+ var m=simMinutes%1440;
+ if(id==='cafe')return m>=mins(7)&&m<mins(22);
+ if(id==='market'||id==='bakery')return m>=mins(8)&&m<mins(21);
+ if(id==='library')return m>=mins(9)&&m<mins(19);
+ if(id==='clinic')return m>=mins(8,30)&&m<mins(18);
+ if(id==='school')return m>=mins(8)&&m<mins(17);
+ return true;
+}
+
+function nearestRoadPoint(x,y){
+ var best={x:roadX[0],y:roadY[0]},bd=1e9;
+ roadX.forEach(function(rx){roadY.forEach(function(ry){var d=Math.abs(x-rx)+Math.abs(y-ry);if(d<bd){bd=d;best={x:rx,y:ry}}})});
+ return best;
+}
+function routeBetween(a,b){
+ var s=nearestRoadPoint(a[0],a[1]),t=nearestRoadPoint(b[0],b[1]);
+ var r=[{x:a[0],y:a[1]}];
+ if(Math.abs(r[r.length-1].x-s.x)+Math.abs(r[r.length-1].y-s.y)>2)r.push({x:s.x,y:s.y});
+ if(s.x!==t.x)r.push({x:t.x,y:s.y});
+ if(s.y!==t.y)r.push({x:t.x,y:t.y});
+ if(Math.abs(t.x-b[0])+Math.abs(t.y-b[1])>2)r.push({x:b[0],y:b[1]});
+ return r;
+}
+
+function roleFor(i){
+ if(i<5)return 'student';
+ if(i<9)return 'retired';
+ var r=i%7;
+ return r===0?'doctor':r===1?'teacher':r===2?'shop':r===3?'cafe':'office';
+}
+function workFor(role){
+ if(role==='student')return 'school';
+ if(role==='doctor')return 'clinic';
+ if(role==='teacher')return 'school';
+ if(role==='shop')return Math.random()<.5?'market':'bakery';
+ if(role==='cafe')return 'cafe';
+ if(role==='retired')return 'library';
+ return Math.random()<.23?'factory':'office';
+}
+function roleLabel(r){
+ return {student:'学生',retired:'退職後',doctor:'診療所勤務',teacher:'学校勤務',shop:'販売員',cafe:'カフェ勤務',office:'会社員'}[r]||r;
+}
+
+var people=[];
+function makePerson(i){
+ var role=roleFor(i),home=homes[i%homes.length],work=workFor(role);
+ var p={
+   id:i,name:firstNames[i],age:role==='student'?irnd(18,12):role==='retired'?irnd(78,64):irnd(59,22),
+   role:role,home:home.id,work:work,color:colors[i%colors.length],
+   x:home.door[0]+rnd(8,-8),y:home.door[1]+rnd(8,-8),place:home.id,target:home.id,
+   route:[],ri:0,state:'sleeping',mood:rnd(.82,.55),energy:rnd(.95,.72),hunger:rnd(.35,.08),
+   social:rnd(1,.2),curiosity:rnd(1,.15),routine:rnd(1,.2),friend:-1,chat:0,lastDecision:-999,dayPlan:-1,
+   thought:'まだ眠っています。',visits:0
+ };
+ return p;
+}
+
+function chooseLeisure(p){
+ var rain=weather==='rain';
+ if(p.hunger>.68&&isOpen('cafe'))return Math.random()<.55?'cafe':(isOpen('bakery')?'bakery':'market');
+ if(rain){
+   var indoor=['cafe','library','market','hall'].filter(isOpen);
+   return pick(indoor);
+ }
+ if(p.curiosity>.72&&Math.random()<.5)return Math.random()<.55?'park':'river';
+ if(p.social>.62)return Math.random()<.55?'cafe':'hall';
+ return Math.random()<.5?'park':'library';
+}
+function desiredFor(p){
+ var m=simMinutes%1440;
+ if(p.chat>0)return p.target;
+ if(m<mins(6,10))return p.home;
+ if(m<mins(7,30)){
+   if(p.role==='retired')return weather==='rain'?p.home:'park';
+   return p.home;
+ }
+ if(m<mins(8,50)){
+   if(p.role==='retired')return chooseLeisure(p);
+   return p.work;
+ }
+ if(m<mins(12))return p.role==='retired'?chooseLeisure(p):p.work;
+ if(m<mins(13,10)){
+   if(p.role==='student')return Math.random()<.55?'park':'cafe';
+   if(p.role==='retired')return chooseLeisure(p);
+   return Math.random()<.62?'cafe':'park';
+ }
+ if(m<mins(17,10)){
+   if(p.role==='retired')return chooseLeisure(p);
+   return p.work;
+ }
+ if(m<mins(20,20)){
+   if(p.hunger>.72)return isOpen('market')?'market':p.home;
+   return chooseLeisure(p);
+ }
+ if(m<mins(22,20)){
+   if(p.social>.8&&Math.random()<.10&&isOpen('cafe'))return 'cafe';
+   return p.home;
+ }
+ return p.home;
+}
+
+function activityFor(p,id){
+ if(id===p.home)return (simMinutes%1440<mins(6,10)||simMinutes%1440>mins(22,20))?'sleeping':'home';
+ if(id===p.work)return p.role==='student'?'studying':'working';
+ if(id==='cafe')return 'eating';
+ if(id==='market'||id==='bakery')return 'shopping';
+ if(id==='park'||id==='river')return 'walking';
+ if(id==='library')return 'reading';
+ if(id==='hall')return 'socializing';
+ if(id==='clinic')return p.role==='doctor'?'working':'errand';
+ return 'visiting';
+}
+function actionLabel(s){
+ return {sleeping:'睡眠中',home:'家で過ごす',walking:'散歩中',commuting:'移動中',working:'仕事中',studying:'授業中',eating:'食事中',shopping:'買い物中',reading:'読書中',socializing:'交流中',chatting:'立ち話中',errand:'用事中',visiting:'滞在中'}[s]||s;
+}
+
+function setTarget(p,id){
+ if(!B[id])id=p.home;
+ if(p.target===id&&p.route.length)return;
+ p.target=id;p.ri=0;p.route=routeBetween([p.x,p.y],B[id].door);
+ if(p.route.length&&Math.abs(p.route[0].x-p.x)+Math.abs(p.route[0].y-p.y)<3)p.route.shift();
+ p.state='commuting';
+ p.thought=placeName(id)+'へ向かっています。';
+}
+function arrive(p){
+ p.place=p.target;p.route=[];p.ri=0;p.state=activityFor(p,p.place);
+ if(p.state==='shopping'){p.visits++;shopVisits++}
+ if(p.state==='eating'){p.hunger=Math.max(.08,p.hunger-.58);p.mood=clamp(p.mood+.08,0,1)}
+ if(p.state==='walking'){p.mood=clamp(p.mood+.035,0,1)}
+ if(p.state==='reading'){p.mood=clamp(p.mood+.025,0,1)}
+ if(p.state==='home'){p.energy=clamp(p.energy+.04,0,1)}
+ p.thought=thoughtFor(p);
+}
+function thoughtFor(p){
+ if(p.chat>0&&p.friend>=0)return people[p.friend].name+'と少し話しています。';
+ if(p.state==='sleeping')return '明日に備えて休んでいます。';
+ if(p.state==='working')return p.energy<.35?'そろそろ一息つきたいようです。':'目の前の仕事に集中しています。';
+ if(p.state==='studying')return '授業を受けています。';
+ if(p.state==='eating')return '少し機嫌が良くなりました。';
+ if(p.state==='shopping')return '必要なものを見て回っています。';
+ if(p.state==='walking')return weather==='rain'?'雨なので早めに戻るつもりです。':'特に急がず歩いています。';
+ if(p.state==='reading')return '静かな時間を過ごしています。';
+ if(p.state==='socializing')return '誰か知っている人が来ないか気にしています。';
+ if(p.state==='home')return p.energy<.45?'今日は少し疲れたようです。':'家でゆっくりしています。';
+ return placeName(p.target)+'へ向かっています。';
+}
+
+function updateNeeds(p,dt){
+ var hour=dt/60;
+ p.hunger=clamp(p.hunger+hour*.04,0,1);
+ if(p.state==='sleeping'||p.state==='home')p.energy=clamp(p.energy+hour*.08,0,1);
+ else p.energy=clamp(p.energy-hour*.025,0,1);
+ if(p.hunger>.82)p.mood=clamp(p.mood-hour*.035,0,1);
+}
+function movePerson(p,dt){
+ if(!p.route.length)return;
+ var q=p.route[0],dx=q.x-p.x,dy=q.y-p.y,d=Math.sqrt(dx*dx+dy*dy);
+ var pace=(p.role==='retired'?21:p.role==='student'?30:26)*dt/60;
+ if(d<=pace+1){p.x=q.x;p.y=q.y;p.route.shift();if(!p.route.length)arrive(p)}
+ else{p.x+=dx/d*pace;p.y+=dy/d*pace}
+}
+function decidePerson(p){
+ if(p.chat>0)return;
+ var desired=desiredFor(p);
+ if(desired!==p.target||(!p.route.length&&p.place!==desired))setTarget(p,desired);
+ if(!p.route.length&&p.place===desired&&p.state==='commuting')arrive(p);
+}
+
+function maybeChat(p){
+ if(p.chat>0||p.state==='commuting'||p.state==='sleeping')return;
+ for(var i=p.id+1;i<people.length;i++){
+   var q=people[i];
+   if(q.chat>0||q.state==='commuting'||q.state==='sleeping'||q.place!==p.place)continue;
+   if(dist(p,q)<22&&Math.random()<.0022*(.4+p.social+q.social)){
+     p.chat=q.chat=irnd(20,8);p.friend=q.id;q.friend=p.id;p.state=q.state='chatting';encounters++;
+     p.mood=clamp(p.mood+.06,0,1);q.mood=clamp(q.mood+.06,0,1);
+     log(p.name+' と '+q.name+' が '+placeName(p.place)+' で立ち話。');
+     break;
+   }
+ }
+}
+
+function weatherName(){return weather==='clear'?'晴れ':weather==='cloud'?'くもり':'雨'}
+function chooseWeather(){
+ var r=Math.random(),old=weather;
+ weather=r<.54?'clear':r<.78?'cloud':'rain';
+ weatherUntil=simMinutes+irnd(300,120);
+ if(old!==weather)log(weather==='rain'?'雨が降り始めました。':weather==='clear'?'雲が切れて晴れてきました。':'空がくもってきました。');
+}
+function temperature(){
+ var m=simMinutes%1440,h=m/60;
+ var wave=Math.sin((h-7)/24*Math.PI*2);
+ return Math.round(18+5*wave+(weather==='rain'?-2:weather==='clear'?1:0));
+}
+
+function newDay(){
+ day++;
+ people.forEach(function(p){p.dayPlan=day;p.friend=-1;p.chat=0;p.mood=clamp(p.mood+rnd(.08,-.04),.15,1)});
+ log('DAY '+day+'。街に新しい朝が来ました。');
+}
+function sim(dt){
+ var prev=Math.floor(simMinutes/1440);
+ simMinutes+=dt*speed;
+ if(Math.floor(simMinutes/1440)>prev)newDay();
+ if(simMinutes>=weatherUntil)chooseWeather();
+
+ people.forEach(function(p){
+   updateNeeds(p,dt*speed);
+   if(p.chat>0){p.chat-=dt*speed;if(p.chat<=0){p.chat=0;p.friend=-1;p.state=activityFor(p,p.place);p.thought=thoughtFor(p)}}
+   if(frameNo%18===p.id%18)decidePerson(p);
+   movePerson(p,dt*speed);
+   maybeChat(p);
+ });
+ frameNo++;
+}
+
+function drawRoads(){
+ ctx.fillStyle='#273139';ctx.fillRect(0,0,W,H);
+ ctx.fillStyle='#53606a';
+ roadY.forEach(function(y){ctx.fillRect(0,y-28,W,56)});
+ roadX.forEach(function(x){ctx.fillRect(x-28,0,56,H)});
+ ctx.strokeStyle='rgba(226,213,166,.45)';ctx.lineWidth=2;ctx.setLineDash([16,15]);
+ roadY.forEach(function(y){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()});
+ roadX.forEach(function(x){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke()});
+ ctx.setLineDash([]);
+ ctx.fillStyle='#bbc0b6';
+ roadY.forEach(function(y){ctx.fillRect(0,y-34,W,6);ctx.fillRect(0,y+28,W,6)});
+ roadX.forEach(function(x){ctx.fillRect(x-34,0,6,H);ctx.fillRect(x+28,0,6,H)});
+}
+function buildingColor(t){
+ return {home:'#76685d',work:'#596979',school:'#7a7658',clinic:'#657b72',market:'#816b56',cafe:'#806154',park:'#486851',library:'#5c6678',station:'#686a6b',hall:'#75697a'}[t]||'#666';
+}
+function drawBuilding(b){
+ if(b.type==='park'){
+   ctx.fillStyle='#426347';ctx.fillRect(b.x,b.y,b.w,b.h);
+   ctx.strokeStyle='#809b74';ctx.lineWidth=2;ctx.strokeRect(b.x,b.y,b.w,b.h);
+   for(var i=0;i<9;i++){var tx=b.x+18+(i*37)%Math.max(35,b.w-35),ty=b.y+20+(i*29)%Math.max(35,b.h-35);ctx.fillStyle='#294b32';ctx.beginPath();ctx.arc(tx,ty,8,0,7);ctx.fill()}
+ }else{
+   ctx.fillStyle=buildingColor(b.type);ctx.fillRect(b.x,b.y,b.w,b.h);
+   ctx.strokeStyle='rgba(236,226,199,.36)';ctx.lineWidth=2;ctx.strokeRect(b.x,b.y,b.w,b.h);
+   var night=isNight(),lit=night||weather==='rain';
+   for(var yy=b.y+18;yy<b.y+b.h-15;yy+=25)for(var xx=b.x+15;xx<b.x+b.w-13;xx+=29){
+     ctx.fillStyle=lit&&Math.random()>.24?'#d8bd70':'#303840';ctx.fillRect(xx,yy,10,7);
+   }
+ }
+ ctx.fillStyle='rgba(8,12,16,.72)';ctx.fillRect(b.x+5,b.y+5,Math.min(b.w-10,ctx.measureText(b.name).width+16),20);
+ ctx.fillStyle='#e5e1d4';ctx.font='11px sans-serif';ctx.textAlign='left';ctx.fillText(b.name,b.x+12,b.y+19);
+}
+function drawPeople(){
+ people.forEach(function(p){
+   var r=p.id===selected?7:4.2;
+   if(p.id===selected){ctx.strokeStyle='rgba(255,245,194,.8)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(p.x,p.y,12+Math.sin(frameNo*.08)*2,0,7);ctx.stroke()}
+   ctx.fillStyle='rgba(0,0,0,.35)';ctx.beginPath();ctx.ellipse(p.x+2,p.y+4,r*.8,r*.45,0,0,7);ctx.fill();
+   ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,r,0,7);ctx.fill();
+   if(p.chat>0){ctx.fillStyle='#f2ead0';ctx.beginPath();ctx.arc(p.x+7,p.y-8,3,0,7);ctx.fill()}
+ });
+}
+function drawCars(){
+ var t=(simMinutes*1.8)%W;
+ var active=(simMinutes%1440>mins(6)&&simMinutes%1440<mins(22));
+ if(!active)return;
+ for(var i=0;i<7;i++){
+   var x=(t+i*180)%W,y=roadY[i%roadY.length]+(i%2?11:-11);
+   ctx.fillStyle=colors[(i+3)%colors.length];ctx.fillRect(x-8,y-4,16,8);
+ }
+ var tt=(simMinutes*1.45)%H;
+ for(i=0;i<4;i++){
+   var yy=(tt+i*210)%H,xx=roadX[(i+1)%roadX.length]+(i%2?10:-10);
+   ctx.fillStyle=colors[(i+6)%colors.length];ctx.fillRect(xx-4,yy-8,8,16);
+ }
+}
+function drawStreetlights(){
+ if(!isNight()&&weather!=='rain')return;
+ ctx.fillStyle='rgba(255,219,135,.22)';
+ roadX.forEach(function(x){roadY.forEach(function(y){ctx.beginPath();ctx.arc(x+35,y+35,28,0,7);ctx.fill()})});
+ ctx.fillStyle='#ffd98b';
+ roadX.forEach(function(x){roadY.forEach(function(y){ctx.beginPath();ctx.arc(x+35,y+35,3,0,7);ctx.fill()})});
+}
+function drawWeather(){
+ if(weather==='cloud'){ctx.fillStyle='rgba(84,94,105,.16)';ctx.fillRect(0,0,W,H)}
+ if(weather==='rain'){
+   ctx.fillStyle='rgba(42,60,75,.19)';ctx.fillRect(0,0,W,H);
+   ctx.strokeStyle='rgba(155,191,216,.35)';ctx.lineWidth=1;
+   for(var i=0;i<85;i++){var x=(i*83+frameNo*5)%W,y=(i*47+frameNo*9)%H;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x-6,y+15);ctx.stroke()}
+ }
+ var m=simMinutes%1440,alpha=0;
+ if(m<mins(5,30))alpha=.50;
+ else if(m<mins(7))alpha=.50*(1-(m-mins(5,30))/90);
+ else if(m>mins(18,10))alpha=clamp((m-mins(18,10))/150,0,.50);
+ if(alpha>0){ctx.fillStyle='rgba(8,14,35,'+alpha+')';ctx.fillRect(0,0,W,H)}
+}
+function drawSelectedPath(){
+ if(selected<0)return;var p=people[selected];if(!p.route.length)return;
+ ctx.strokeStyle='rgba(255,240,177,.55)';ctx.lineWidth=2;ctx.setLineDash([5,6]);ctx.beginPath();ctx.moveTo(p.x,p.y);p.route.forEach(function(q){ctx.lineTo(q.x,q.y)});ctx.stroke();ctx.setLineDash([]);
+}
+function draw(){
+ ctx.clearRect(0,0,W,H);
+ drawRoads();
+ buildings.forEach(drawBuilding);
+ drawCars();drawSelectedPath();drawPeople();drawStreetlights();drawWeather();
+}
+
+function occupancy(){
+ var map={};places.forEach(function(b){map[b.id]=0});
+ people.forEach(function(p){if(map[p.place]!==undefined&&p.state!=='commuting')map[p.place]++});
+ return map;
+}
+function updateUI(){
+ document.getElementById('day').textContent='DAY '+day;
+ document.getElementById('clock').textContent=clockText(simMinutes);
+ document.getElementById('weather').textContent=weatherName();
+ document.getElementById('temp').textContent=temperature()+'°C';
+ document.getElementById('population').textContent=people.length;
+ document.getElementById('outside').textContent=people.filter(function(p){return p.state==='commuting'||p.state==='walking'||p.state==='chatting'}).length;
+ document.getElementById('working').textContent=people.filter(function(p){return p.state==='working'||p.state==='studying'}).length;
+ document.getElementById('chatting').textContent=people.filter(function(p){return p.chat>0}).length;
+ document.getElementById('visits').textContent=shopVisits;
+ document.getElementById('encounters').textContent=encounters;
+
+ var occ=occupancy(),busy=places.map(function(b){return {b:b,n:occ[b.id]||0}}).sort(function(a,b){return b.n-a.n}).slice(0,5);
+ var max=Math.max(1,busy[0]?busy[0].n:1);
+ document.getElementById('crowd').innerHTML=busy.map(function(q){return '<div class="crowdrow"><div>'+q.b.name+'<div class="bar"><i style="width:'+Math.round(q.n/max*100)+'%"></i></div></div><b>'+q.n+'</b></div>'}).join('');
+
+ document.getElementById('feed').innerHTML=logs.map(function(e){return '<div class="ev"><small>DAY '+e.d+' / '+e.t+'</small>'+e.s+'</div>'}).join('');
+
+ if(selected<0){document.getElementById('personEmpty').hidden=false;document.getElementById('personPanel').hidden=true}
+ else{
+   var p=people[selected];
+   document.getElementById('personEmpty').hidden=true;document.getElementById('personPanel').hidden=false;
+   document.getElementById('personDot').style.background=p.color;
+   document.getElementById('personName').textContent=p.name;
+   document.getElementById('personRole').textContent=roleLabel(p.role)+' / 家: '+placeName(p.home);
+   document.getElementById('personAge').textContent=p.age+'歳';
+   document.getElementById('personAction').textContent=actionLabel(p.state);
+   document.getElementById('personPlace').textContent=(p.state==='commuting'?'目的地: '+placeName(p.target):'現在地: '+placeName(p.place))+' / 気分 '+Math.round(p.mood*100)+' / 元気 '+Math.round(p.energy*100);
+   document.getElementById('personThought').textContent=p.thought;
+ }
+}
+
+function init(){
+ people=[];logs=[];encounters=0;shopVisits=0;selected=-1;simMinutes=mins(5,45);day=1;weather='clear';weatherUntil=mins(10,30);frameNo=0;
+ for(var i=0;i<40;i++)people.push(makePerson(i));
+ log('静かな朝。家々の明かりが少しずつ消えていきます。');
+ updateUI();draw();
+}
+
+V.addEventListener('click',function(e){
+ var r=V.getBoundingClientRect(),x=(e.clientX-r.left)*V.width/r.width,y=(e.clientY-r.top)*V.height/r.height,best=-1,bd=18;
+ people.forEach(function(p){var d=Math.hypot(p.x-x,p.y-y);if(d<bd){bd=d;best=p.id}});
+ if(best>=0){selected=best;people[best].thought=thoughtFor(people[best]);updateUI()}
+});
+document.getElementById('pause').addEventListener('click',function(){paused=!paused;this.textContent=paused?'RESUME':'PAUSE'});
+document.getElementById('new').addEventListener('click',init);
+document.getElementById('random').addEventListener('click',function(){selected=irnd(people.length);updateUI()});
+Array.prototype.forEach.call(document.querySelectorAll('.sp'),function(b){b.addEventListener('click',function(){speed=Number(this.getAttribute('data-s'));Array.prototype.forEach.call(document.querySelectorAll('.sp'),function(q){q.classList.toggle('on',q===b)})})});
+
+function loop(now){
+ var real=Math.min(.08,(now-last)/1000);last=now;
+ if(!paused){sim(real*6);if(frameNo%6===0)updateUI()}
+ draw();requestAnimationFrame(loop);
+}
+
+init();requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
